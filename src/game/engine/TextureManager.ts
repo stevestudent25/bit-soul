@@ -19,8 +19,19 @@ const MATERIAL_TILES: Record<TileMaterial, number[]> = {
   [TileMaterial.Sand]:  [8, 9, 10, 11],
 };
 
-// Wall tile indices (darker variants)
-const WALL_TILES = [20, 21, 22, 23, 36, 37, 38, 39];
+// Wall tile indices per material (biome-matched darker variants)
+const MATERIAL_WALL_TILES: Record<TileMaterial, number[]> = {
+  [TileMaterial.Stone]: [20, 21, 22, 23],
+  [TileMaterial.Wood]:  [24, 25, 26, 27],
+  [TileMaterial.Crystal]: [36, 37, 38, 39],
+  [TileMaterial.Ice]:   [52, 53, 54, 55],
+  [TileMaterial.Lava]:  [68, 69, 70, 71],
+  [TileMaterial.Void]:  [84, 85, 86, 87],
+  [TileMaterial.Metal]: [100, 101, 102, 103],
+  [TileMaterial.Water]: [116, 117, 118, 119],
+  [TileMaterial.Grass]: [12, 13, 14, 15],
+  [TileMaterial.Sand]:  [28, 29, 30, 31],
+};
 
 // Character sprite filenames
 const CHARACTER_SPRITES = [
@@ -185,9 +196,10 @@ export class TextureManager {
     return canvas;
   }
 
-  /** Get a wall tile canvas */
-  getWallTile(tileSize: number, variant: number = 0): HTMLCanvasElement {
-    const key = `wall_${tileSize}_${variant}`;
+  /** Get a wall tile canvas (biome-aware) */
+  getWallTile(tileSize: number, variant: number = 0, material?: TileMaterial): HTMLCanvasElement {
+    const mat = material ?? TileMaterial.Stone;
+    const key = `wall_${mat}_${tileSize}_${variant}`;
     if (this.tileCache.has(key)) return this.tileCache.get(key)!;
 
     const canvas = document.createElement('canvas');
@@ -195,19 +207,48 @@ export class TextureManager {
     canvas.height = tileSize;
     const ctx = canvas.getContext('2d')!;
 
-    const idx = WALL_TILES[variant % WALL_TILES.length];
-    const tileName = `tile_${idx.toString().padStart(4, '0')}`;
-    const img = this.images.get(tileName);
-    if (img && img.complete && img.naturalWidth > 0) {
-      ctx.imageSmoothingEnabled = false;
-      ctx.drawImage(img, 0, 0, tileSize, tileSize);
-    } else {
-      ctx.fillStyle = '#2a2a3a';
-      ctx.fillRect(0, 0, tileSize, tileSize);
-      ctx.strokeStyle = '#1a1a2a';
-      ctx.lineWidth = 1;
-      ctx.strokeRect(0, 0, tileSize, tileSize);
+    // Try material-specific wall tiles first, fall back to using floor tiles darkened
+    const wallIndices = MATERIAL_WALL_TILES[mat];
+    const floorIndices = MATERIAL_TILES[mat];
+    const indices = wallIndices || floorIndices;
+    if (indices) {
+      const idx = indices[variant % indices.length];
+      const tileName = `tile_${idx.toString().padStart(4, '0')}`;
+      const img = this.images.get(tileName);
+      if (img && img.complete && img.naturalWidth > 0) {
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(img, 0, 0, tileSize, tileSize);
+        // Darken wall tiles slightly to distinguish from floor
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
+        ctx.fillRect(0, 0, tileSize, tileSize);
+        this.tileCache.set(key, canvas);
+        return canvas;
+      }
     }
+
+    // Fallback: use floor tile with heavy darken
+    if (floorIndices) {
+      const idx = floorIndices[variant % floorIndices.length];
+      const tileName = `tile_${idx.toString().padStart(4, '0')}`;
+      const img = this.images.get(tileName);
+      if (img && img.complete && img.naturalWidth > 0) {
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(img, 0, 0, tileSize, tileSize);
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+        ctx.fillRect(0, 0, tileSize, tileSize);
+        this.tileCache.set(key, canvas);
+        return canvas;
+      }
+    }
+
+    // Final fallback: colored rectangle
+    ctx.fillStyle = this.getFallbackColor(mat);
+    ctx.fillRect(0, 0, tileSize, tileSize);
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+    ctx.fillRect(0, 0, tileSize, tileSize);
+    ctx.strokeStyle = 'rgba(0,0,0,0.4)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(0, 0, tileSize, tileSize);
 
     this.tileCache.set(key, canvas);
     return canvas;

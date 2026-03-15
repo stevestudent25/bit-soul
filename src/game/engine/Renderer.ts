@@ -27,8 +27,6 @@ const BIOME_COLORS: Record<Biome, string> = {
   [Biome.NeonRuins]: '#1a1a2e',
 };
 
-const WALL_VARIANTS = 8;
-
 export class Renderer {
   private ctx: CanvasRenderingContext2D;
   private width: number;
@@ -110,8 +108,13 @@ export class Renderer {
   }
 
   private renderWallTile(sx: number, sy: number, size: number, tile: Tile, textures: TextureManager): void {
-    const tileCanvas = textures.getWallTile(this.tileSize, (tile.x + tile.y) % WALL_VARIANTS);
+    const wallMat = tile.properties.material;
+    const tileCanvas = textures.getWallTile(this.tileSize, (tile.x + tile.y) % 4, wallMat);
     this.ctx.drawImage(tileCanvas, 0, 0, this.tileSize, this.tileSize, sx, sy, size, size);
+
+    // Biome tint overlay (match ground tint)
+    this.ctx.fillStyle = BIOME_COLORS[tile.biome] + '40';
+    this.ctx.fillRect(sx, sy, size, size);
 
     // 3D edge shadow
     this.ctx.fillStyle = 'rgba(0,0,0,0.4)';
@@ -821,37 +824,44 @@ export class Renderer {
       }
     }
 
-    // Dungeon stats display (top center)
-    this.ctx.font = 'bold 24px monospace';
+    // Dungeon stats display (top center) — stacked rows to avoid overlap
     this.ctx.textAlign = 'center';
     const cx = this.width / 2;
+
+    // Row 1: Zone name and floor (centered)
+    this.ctx.font = 'bold 22px monospace';
     this.ctx.fillStyle = '#a855f7';
-    this.ctx.fillText(`${dungeonStats.zoneName ?? ''} — Floor ${dungeonStats.floor}`, cx, 28);
-    this.ctx.font = 'bold 18px monospace';
+    this.ctx.fillText(`${dungeonStats.zoneName ?? ''} — Floor ${dungeonStats.floor}`, cx, 24);
+
+    // Row 2: Stats spread evenly below
+    this.ctx.font = 'bold 16px monospace';
     this.ctx.fillStyle = '#44ff44';
-    this.ctx.fillText(`⚔ ${dungeonStats.kills}`, cx - 120, 28);
+    this.ctx.textAlign = 'right';
+    this.ctx.fillText(`⚔ ${dungeonStats.kills}`, cx - 60, 46);
+    this.ctx.fillStyle = '#ff6644';
+    this.ctx.textAlign = 'center';
+    this.ctx.fillText(`Enemies: ${dungeonStats.enemiesLeft}`, cx, 46);
     this.ctx.fillStyle = '#f59e0b';
-    this.ctx.fillText(`💰 ${dungeonStats.gold}`, cx + 120, 28);
+    this.ctx.textAlign = 'left';
+    this.ctx.fillText(`💰 ${dungeonStats.gold}`, cx + 60, 46);
     if (dungeonStats.items !== undefined && dungeonStats.items > 0) {
       this.ctx.fillStyle = '#44ccff';
-      this.ctx.fillText(`📦 ${dungeonStats.items}`, cx + 220, 28);
+      this.ctx.fillText(`📦 ${dungeonStats.items}`, cx + 160, 46);
     }
-    this.ctx.font = 'bold 20px monospace';
-    this.ctx.fillStyle = '#ff6644';
-    this.ctx.fillText(`Enemies: ${dungeonStats.enemiesLeft}`, cx, 54);
 
-    // Timer and phase
+    // Row 3: Timer and phase
     const minutes = Math.floor(matchTime / 3600);
     const seconds = Math.floor((matchTime % 3600) / 60);
     this.ctx.fillStyle = '#aaa';
-    this.ctx.font = '16px monospace';
-    this.ctx.fillText(`${minutes}:${seconds.toString().padStart(2, '0')} — ${phase}`, cx, 74);
+    this.ctx.font = '14px monospace';
+    this.ctx.textAlign = 'center';
+    this.ctx.fillText(`${minutes}:${seconds.toString().padStart(2, '0')} — ${phase}`, cx, 64);
 
     // Kill feed (top right)
     const now = Date.now();
     this.ctx.textAlign = 'right';
     this.ctx.font = '14px monospace';
-    let kfY = 80;
+    let kfY = 78;
     for (const entry of killFeed.slice(-6)) {
       const age = now - entry.time;
       if (age > 8000) continue;
