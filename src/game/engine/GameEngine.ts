@@ -771,9 +771,8 @@ export class GameEngine {
         const aimDy = mouseWorld.y - soul.position.y;
         const angle = Math.atan2(aimDy, aimDx);
 
-        // Update facing — preserve horizontal direction for sprite flip
+        // Update facing — only flip horizontal direction, don't touch facing.y
         const aimCos = Math.cos(angle);
-        soul.facing.y = Math.sin(angle);
         if (Math.abs(aimCos) > 0.15) soul.facing.x = aimCos;
 
         this.bulletSystem.fire(
