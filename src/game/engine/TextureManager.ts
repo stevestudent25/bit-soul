@@ -215,15 +215,14 @@ export class TextureManager {
 
   /** Get the primary texture name for a biome */
   getBiomeTexture(biome: Biome, secondary = false): string {
-    // Return the material name as a string for tile lookup
     switch (biome) {
       case Biome.CrystalCaverns: return secondary ? TileMaterial.Stone : TileMaterial.Crystal;
       case Biome.EmberFields: return secondary ? TileMaterial.Stone : TileMaterial.Lava;
       case Biome.VoidMarsh: return secondary ? TileMaterial.Water : TileMaterial.Void;
-      case Biome.ArcaneForest: return secondary ? TileMaterial.Grass : TileMaterial.Wood;
+      case Biome.ArcaneForest: return secondary ? TileMaterial.Wood : TileMaterial.Grass;
       case Biome.FrozenAether: return secondary ? TileMaterial.Stone : TileMaterial.Ice;
       case Biome.NeonRuins: return secondary ? TileMaterial.Stone : TileMaterial.Metal;
-      default: return secondary ? TileMaterial.Sand : TileMaterial.Stone;
+      default: return secondary ? TileMaterial.Stone : TileMaterial.Sand;
     }
   }
 

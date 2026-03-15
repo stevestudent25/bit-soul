@@ -147,6 +147,7 @@ export class GameEngine {
       seed,
       tileSize: this.config.tileSize,
       floor: this.currentFloor,
+      biome: this.zoneManager.biome,
     });
 
     this.pathfinder = new PathFinder(this.map);
@@ -197,6 +198,7 @@ export class GameEngine {
       seed,
       tileSize: this.config.tileSize,
       floor: this.currentFloor,
+      biome: this.zoneManager.biome,
     });
     this.pathfinder = new PathFinder(this.map);
 
@@ -609,6 +611,7 @@ export class GameEngine {
       seed,
       tileSize: this.config.tileSize,
       floor: this.currentFloor,
+      biome: this.zoneManager.biome,
     });
     this.pathfinder = new PathFinder(this.map);
 
@@ -1803,6 +1806,7 @@ export class GameEngine {
       seed,
       tileSize: this.config.tileSize,
       floor: this.currentFloor,
+      biome: this.zoneManager.biome,
     });
     this.pathfinder = new PathFinder(this.map);
 

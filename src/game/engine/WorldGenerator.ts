@@ -12,6 +12,7 @@ export interface WorldConfig {
   seed: number;
   tileSize: number;
   floor: number;
+  biome?: Biome;
 }
 
 const DEFAULT_CONFIG: WorldConfig = {
@@ -54,17 +55,25 @@ const FLOOR_BIOMES: Biome[] = [
 
 function biomeWallMaterial(biome: Biome): TileMaterial {
   switch (biome) {
-    case Biome.CrystalCaverns: return TileMaterial.Crystal;
+    case Biome.ShatteredPlains: return TileMaterial.Stone;
+    case Biome.CrystalCaverns: return TileMaterial.Stone;
     case Biome.NeonRuins: return TileMaterial.Metal;
     case Biome.EmberFields: return TileMaterial.Lava;
     case Biome.FrozenAether: return TileMaterial.Ice;
+    case Biome.ArcaneForest: return TileMaterial.Wood;
+    case Biome.VoidMarsh: return TileMaterial.Stone;
     default: return TileMaterial.Stone;
   }
 }
 
 function biomeFloorMaterial(biome: Biome): TileMaterial {
   switch (biome) {
-    case Biome.ArcaneForest: return TileMaterial.Wood;
+    case Biome.ShatteredPlains: return TileMaterial.Sand;
+    case Biome.CrystalCaverns: return TileMaterial.Crystal;
+    case Biome.EmberFields: return TileMaterial.Lava;
+    case Biome.FrozenAether: return TileMaterial.Ice;
+    case Biome.NeonRuins: return TileMaterial.Metal;
+    case Biome.ArcaneForest: return TileMaterial.Grass;
     case Biome.VoidMarsh: return TileMaterial.Void;
     default: return TileMaterial.Stone;
   }
@@ -80,7 +89,7 @@ export function generateWorld(cfg: Partial<WorldConfig> = {}): GameMap {
   const floor = config.floor || 1;
   const rng = new SeededRandom(seed);
 
-  const biome = FLOOR_BIOMES[(floor - 1) % FLOOR_BIOMES.length];
+  const biome = config.biome ?? FLOOR_BIOMES[(floor - 1) % FLOOR_BIOMES.length];
   const wallMat = biomeWallMaterial(biome);
   const floorMat = biomeFloorMaterial(biome);
 
