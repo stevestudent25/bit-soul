@@ -45,6 +45,10 @@ export class ZoneManager {
     return this.currentZone.enemyCount;
   }
 
+  get enemySprites(): string[] {
+    return this.currentZone.enemySprites;
+  }
+
   /** Check if the current zone's last floor should spawn a boss */
   shouldSpawnBoss(): boolean {
     const zone = this.currentZone;

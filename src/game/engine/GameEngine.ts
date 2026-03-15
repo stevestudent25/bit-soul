@@ -241,6 +241,7 @@ export class GameEngine {
 
   private spawnSouls(): void {
     const enemyClasses = [SoulClass.Soldier, SoulClass.Hitman, SoulClass.Robot, SoulClass.Survivor, SoulClass.Scout];
+    const monsterSprites = this.zoneManager.enemySprites;
     this.souls = [];
 
     // Spawn player near center of map
@@ -271,6 +272,9 @@ export class GameEngine {
 
       const cls = enemyClasses[i % enemyClasses.length];
       const enemy = createSoul(cls, 'enemy', { x: ex, y: ey }, Date.now() + i + 1);
+
+      // Assign zone-specific monster sprite
+      enemy.sprite = `mon_${monsterSprites[i % monsterSprites.length]}`;
 
       // Scale enemy stats with floor
       const floorMult = 1 + (this.currentFloor - 1) * 0.15;
@@ -475,6 +479,8 @@ export class GameEngine {
           // Spawn a minion at given position
           const cls = [SoulClass.Soldier, SoulClass.Hitman, SoulClass.Robot][Math.floor(Math.random() * 3)];
           const minion = createSoul(cls, 'enemy', pos, Date.now() + Math.random() * 99999);
+          const mSprites = this.zoneManager.enemySprites;
+          minion.sprite = `mon_${mSprites[Math.floor(Math.random() * mSprites.length)]}`;
           const floorMult = this.zoneManager.getFloorMultiplier();
           minion.combat.attackPower = Math.floor(minion.combat.attackPower * floorMult * 0.6);
           minion.vitals.hpMax = Math.floor(minion.vitals.hpMax * floorMult * 0.5);
@@ -619,6 +625,7 @@ export class GameEngine {
 
     // Spawn new enemies (zone-based count)
     const enemyClasses = [SoulClass.Soldier, SoulClass.Hitman, SoulClass.Robot, SoulClass.Survivor, SoulClass.Scout];
+    const monsterSprites = this.zoneManager.enemySprites;
     const enemyCount = this.zoneManager.enemyCount + (this.currentFloor - 1) * 2;
     this.enemiesRemaining = enemyCount;
     const floorMult = this.zoneManager.getFloorMultiplier();
@@ -634,6 +641,7 @@ export class GameEngine {
 
       const cls = enemyClasses[i % enemyClasses.length];
       const enemy = createSoul(cls, 'enemy', { x: ex, y: ey }, Date.now() + i + 1);
+      enemy.sprite = `mon_${monsterSprites[i % monsterSprites.length]}`;
       enemy.combat.attackPower = Math.floor(enemy.combat.attackPower * floorMult);
       enemy.vitals.hpMax = Math.floor(enemy.vitals.hpMax * floorMult);
       enemy.vitals.hp = enemy.vitals.hpMax;
@@ -1652,6 +1660,7 @@ export class GameEngine {
     const toSpawn = Math.max(0, targetCount - aliveEnemies);
 
     const enemyClasses = [SoulClass.Soldier, SoulClass.Hitman, SoulClass.Robot, SoulClass.Survivor, SoulClass.Scout];
+    const monsterSprites = this.zoneManager.enemySprites;
     const floorMult = this.zoneManager.getFloorMultiplier();
 
     for (let i = 0; i < toSpawn; i++) {
@@ -1666,6 +1675,7 @@ export class GameEngine {
 
       const cls = enemyClasses[i % enemyClasses.length];
       const enemy = createSoul(cls, 'enemy', { x: ex, y: ey }, Date.now() + i + 1);
+      enemy.sprite = `mon_${monsterSprites[i % monsterSprites.length]}`;
       enemy.combat.attackPower = Math.floor(enemy.combat.attackPower * floorMult);
       enemy.vitals.hpMax = Math.floor(enemy.vitals.hpMax * floorMult);
       enemy.vitals.hp = enemy.vitals.hpMax;

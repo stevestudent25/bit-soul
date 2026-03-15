@@ -78,6 +78,34 @@ export class TextureManager {
       promises.push(this.loadImage(enemy, `assets/enemies/${enemy}.png`));
     }
 
+    // Load monster sprites (zone enemies & bosses)
+    const MONSTER_SPRITES = [
+      'slime', 'slime_walk', 'slime_hit', 'slime_dead',
+      'slimeGreen', 'slimeGreen_walk', 'slimeGreen_hit', 'slimeGreen_dead',
+      'slimeBlue', 'slimeBlue_hit', 'slimeBlue_dead',
+      'slimeBlock', 'slimeBlock_hit', 'slimeBlock_dead',
+      'mouse', 'mouse_walk', 'mouse_hit', 'mouse_dead',
+      'snail', 'snail_walk', 'snail_hit',
+      'spider', 'spider_walk1', 'spider_hit', 'spider_dead',
+      'snake', 'snake_walk', 'snake_hit', 'snake_dead',
+      'snakeLava', 'snakeLava_ani', 'snakeLava_hit', 'snakeLava_dead',
+      'snakeSlime', 'snakeSlime_ani', 'snakeSlime_hit', 'snakeSlime_dead',
+      'bat', 'bat_fly', 'bat_hit', 'bat_dead',
+      'frog', 'frog_leap', 'frog_hit', 'frog_dead',
+      'ghost', 'ghost_normal', 'ghost_hit', 'ghost_dead',
+      'worm', 'worm_walk', 'worm_hit', 'worm_dead',
+      'spinner', 'spinner_spin', 'spinner_hit', 'spinner_dead',
+      'spinnerHalf', 'spinnerHalf_spin', 'spinnerHalf_hit', 'spinnerHalf_dead',
+      'ladyBug', 'ladyBug_walk', 'ladyBug_hit',
+      'fly', 'fly_fly', 'fly_hit', 'fly_dead',
+      'bee', 'bee_fly', 'bee_hit', 'bee_dead',
+      'grassBlock', 'grassBlock_hit', 'grassBlock_dead',
+      'dragon',
+    ];
+    for (const m of MONSTER_SPRITES) {
+      promises.push(this.loadImage(`mon_${m}`, `assets/enemies/monsters/${m}.png`));
+    }
+
     // Load prop sprites (Scribble Dungeons 64px)
     for (const prop of PROP_SPRITES) {
       promises.push(this.loadImage(`prop_${prop}`, `assets/props/${prop}.png`));

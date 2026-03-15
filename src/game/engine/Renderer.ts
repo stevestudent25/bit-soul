@@ -393,8 +393,17 @@ export class Renderer {
       // Gun raise animation: use _gun pose when soul is actively shooting
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const shootFrames = (soul as any).shootingFrames as number | undefined;
-      const pose = (shootFrames && shootFrames > 0) ? '_gun' : '_stand';
-      const spriteName = soul.sprite ? `${soul.sprite}${pose}` : null;
+      const isMonster = soul.sprite?.startsWith('mon_');
+      let spriteName: string | null = null;
+      if (soul.sprite) {
+        if (isMonster) {
+          // Monster sprites: use base sprite directly (no _stand/_gun poses)
+          spriteName = soul.sprite;
+        } else {
+          const pose = (shootFrames && shootFrames > 0) ? '_gun' : '_stand';
+          spriteName = `${soul.sprite}${pose}`;
+        }
+      }
       const spriteImg = spriteName && textures ? textures.getCharacterSprite(spriteName) : null;
 
       if (spriteImg && spriteImg.complete && spriteImg.naturalWidth > 0) {

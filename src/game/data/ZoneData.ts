@@ -14,6 +14,7 @@ export interface ZoneDef {
   floorRange: [number, number];   // which floors this zone spans
   enemyCount: number;
   bossId: string | null;          // null for zone 1 (tutorial/safe)
+  enemySprites: string[];         // monster sprite base names for this zone
   musicTrack: string;
   ambientTrack: string;
   entryLabel: string;
@@ -26,6 +27,7 @@ export const ZONES: ZoneDef[] = [
     id: 'zone1_village', name: 'Haven Village', number: 1,
     biome: Biome.ShatteredPlains, floorRange: [1, 1],
     enemyCount: 6, bossId: null,
+    enemySprites: ['slime', 'slimeGreen', 'mouse', 'snail'],
     musicTrack: 'music_dungeon', ambientTrack: 'amb_spooky',
     entryLabel: 'Haven Village', exitLabel: 'Enter Darkwood Forest',
     requiresBoss: null,
@@ -34,6 +36,7 @@ export const ZONES: ZoneDef[] = [
     id: 'zone2_forest', name: 'Darkwood Forest', number: 2,
     biome: Biome.ArcaneForest, floorRange: [2, 3],
     enemyCount: 10, bossId: 'alpha_wolf',
+    enemySprites: ['spider', 'snake', 'bat', 'bee'],
     musicTrack: 'music_dungeon', ambientTrack: 'amb_spooky',
     entryLabel: 'Darkwood Forest', exitLabel: 'Enter Crystal Caves',
     requiresBoss: null,
@@ -42,6 +45,7 @@ export const ZONES: ZoneDef[] = [
     id: 'zone3_caves', name: 'Crystal Caves', number: 3,
     biome: Biome.CrystalCaverns, floorRange: [4, 5],
     enemyCount: 12, bossId: 'crystal_colossus',
+    enemySprites: ['bat', 'worm', 'spider', 'slimeBlue'],
     musicTrack: 'music_dungeon', ambientTrack: 'amb_spooky',
     entryLabel: 'Crystal Caves', exitLabel: 'Exit to Murkmire Swamp',
     requiresBoss: 'alpha_wolf',
@@ -50,6 +54,7 @@ export const ZONES: ZoneDef[] = [
     id: 'zone4_swamp', name: 'Murkmire Swamp', number: 4,
     biome: Biome.VoidMarsh, floorRange: [6, 7],
     enemyCount: 14, bossId: 'swamp_hydra',
+    enemySprites: ['frog', 'snakeSlime', 'fly', 'worm'],
     musicTrack: 'music_dungeon', ambientTrack: 'amb_spooky',
     entryLabel: 'Murkmire Swamp', exitLabel: 'Enter Ancient Ruins',
     requiresBoss: 'crystal_colossus',
@@ -58,6 +63,7 @@ export const ZONES: ZoneDef[] = [
     id: 'zone5_ruins', name: 'Ancient Ruins', number: 5,
     biome: Biome.NeonRuins, floorRange: [8, 9],
     enemyCount: 16, bossId: 'lich_king',
+    enemySprites: ['ghost', 'spinner', 'worm', 'snakeSlime'],
     musicTrack: 'music_dungeon', ambientTrack: 'amb_spooky',
     entryLabel: 'Ancient Ruins', exitLabel: 'Cross to Iron Fortress',
     requiresBoss: 'swamp_hydra',
@@ -66,6 +72,7 @@ export const ZONES: ZoneDef[] = [
     id: 'zone6_castle', name: 'Iron Fortress', number: 6,
     biome: Biome.ShatteredPlains, floorRange: [10, 11],
     enemyCount: 18, bossId: 'tyrant_king',
+    enemySprites: ['ladyBug', 'spinnerHalf', 'spider', 'slimeBlock'],
     musicTrack: 'music_dungeon', ambientTrack: 'amb_spooky',
     entryLabel: 'Iron Fortress', exitLabel: 'Exit to Scorching Desert',
     requiresBoss: 'lich_king',
@@ -74,6 +81,7 @@ export const ZONES: ZoneDef[] = [
     id: 'zone7_desert', name: 'Scorching Desert', number: 7,
     biome: Biome.EmberFields, floorRange: [12, 13],
     enemyCount: 20, bossId: 'sand_pharaoh',
+    enemySprites: ['snakeLava', 'bee', 'grassBlock', 'fly'],
     musicTrack: 'music_dungeon', ambientTrack: 'amb_spooky',
     entryLabel: 'Scorching Desert', exitLabel: 'Enter Magma Fortress',
     requiresBoss: 'tyrant_king',
@@ -82,6 +90,7 @@ export const ZONES: ZoneDef[] = [
     id: 'zone8_volcano', name: 'Magma Fortress', number: 8,
     biome: Biome.EmberFields, floorRange: [14, 15],
     enemyCount: 22, bossId: 'infernal_dragon',
+    enemySprites: ['snakeLava', 'slimeBlock', 'grassBlock', 'spinner'],
     musicTrack: 'music_dungeon', ambientTrack: 'amb_spooky',
     entryLabel: 'Magma Fortress', exitLabel: 'Enter the Void',
     requiresBoss: 'sand_pharaoh',
@@ -90,6 +99,7 @@ export const ZONES: ZoneDef[] = [
     id: 'zone9_void', name: 'The Dark Realm', number: 9,
     biome: Biome.VoidMarsh, floorRange: [16, 17],
     enemyCount: 24, bossId: 'void_lord',
+    enemySprites: ['ghost', 'spinnerHalf', 'spider', 'snakeLava'],
     musicTrack: 'music_dungeon', ambientTrack: 'amb_spooky',
     entryLabel: 'The Dark Realm', exitLabel: '',
     requiresBoss: 'infernal_dragon',
@@ -134,7 +144,7 @@ export const BOSS_CONFIGS: Record<string, BossConfig> = {
     id: 'alpha_wolf', name: 'ALPHA WOLF', title: 'Terror of the Forest',
     zone: 'zone2_forest', maxHealth: 300, damage: 15, speed: 85, defense: 3,
     phases: 3, phaseThresholds: [0.66, 0.33, 0], maxSummons: 4,
-    sprite: 'zoimbie1',
+    sprite: 'mon_snake',
     attacks: [
       { name: 'bite', damage: 15, range: 3, cooldown: 70, type: 'melee' },
       { name: 'lunge', damage: 20, range: 8, cooldown: 180, type: 'charge' },
@@ -152,7 +162,7 @@ export const BOSS_CONFIGS: Record<string, BossConfig> = {
     id: 'crystal_colossus', name: 'CRYSTAL COLOSSUS', title: 'Guardian of the Deep',
     zone: 'zone3_caves', maxHealth: 500, damage: 20, speed: 40, defense: 10,
     phases: 3, phaseThresholds: [0.6, 0.3, 0], maxSummons: 0,
-    sprite: 'robot2',
+    sprite: 'mon_slimeBlock',
     attacks: [
       { name: 'slam', damage: 25, range: 4, cooldown: 120, type: 'melee' },
       { name: 'crystal_barrage', damage: 10, range: 15, cooldown: 240, type: 'projectile', projectileCount: 8 },
@@ -170,7 +180,7 @@ export const BOSS_CONFIGS: Record<string, BossConfig> = {
     id: 'swamp_hydra', name: 'SWAMP HYDRA', title: 'Poison of the Murk',
     zone: 'zone4_swamp', maxHealth: 450, damage: 18, speed: 50, defense: 5,
     phases: 3, phaseThresholds: [0.66, 0.33, 0], maxSummons: 0,
-    sprite: 'zombie2',
+    sprite: 'mon_snakeSlime',
     attacks: [
       { name: 'head_strike', damage: 18, range: 4, cooldown: 90, type: 'melee' },
       { name: 'poison_spit', damage: 8, range: 12, cooldown: 150, type: 'projectile', projectileCount: 3 },
@@ -188,7 +198,7 @@ export const BOSS_CONFIGS: Record<string, BossConfig> = {
     id: 'lich_king', name: 'LICH KING', title: 'Ruler of the Dead',
     zone: 'zone5_ruins', maxHealth: 550, damage: 22, speed: 60, defense: 8,
     phases: 3, phaseThresholds: [0.66, 0.33, 0], maxSummons: 6,
-    sprite: 'manBrown',
+    sprite: 'mon_ghost',
     attacks: [
       { name: 'dark_bolt', damage: 18, range: 15, cooldown: 70, type: 'projectile', projectileCount: 1 },
       { name: 'summon_skeletons', damage: 0, range: 0, cooldown: 360, type: 'summon', summonCount: 3 },
@@ -206,7 +216,7 @@ export const BOSS_CONFIGS: Record<string, BossConfig> = {
     id: 'tyrant_king', name: 'TYRANT KING', title: 'Iron Fist of the Realm',
     zone: 'zone6_castle', maxHealth: 700, damage: 25, speed: 55, defense: 15,
     phases: 3, phaseThresholds: [0.5, 0.2, 0], maxSummons: 4,
-    sprite: 'soldier2',
+    sprite: 'mon_spinnerHalf',
     attacks: [
       { name: 'sword_combo', damage: 20, range: 3, cooldown: 90, type: 'melee' },
       { name: 'shield_bash', damage: 15, range: 3, cooldown: 150, type: 'melee' },
@@ -226,7 +236,7 @@ export const BOSS_CONFIGS: Record<string, BossConfig> = {
     id: 'sand_pharaoh', name: 'SAND PHARAOH', title: 'Eternal King of the Sands',
     zone: 'zone7_desert', maxHealth: 600, damage: 22, speed: 70, defense: 8,
     phases: 3, phaseThresholds: [0.66, 0.33, 0], maxSummons: 3,
-    sprite: 'manBlue',
+    sprite: 'mon_snakeLava',
     attacks: [
       { name: 'staff_beam', damage: 20, range: 15, cooldown: 120, type: 'beam' },
       { name: 'sand_wave', damage: 15, range: 10, cooldown: 180, type: 'area' },
@@ -245,7 +255,7 @@ export const BOSS_CONFIGS: Record<string, BossConfig> = {
     id: 'infernal_dragon', name: 'INFERNAL DRAGON', title: 'Flame of the Abyss',
     zone: 'zone8_volcano', maxHealth: 800, damage: 30, speed: 60, defense: 12,
     phases: 3, phaseThresholds: [0.66, 0.33, 0], maxSummons: 0,
-    sprite: 'robot1',
+    sprite: 'mon_dragon',
     attacks: [
       { name: 'fire_breath', damage: 8, range: 10, cooldown: 150, type: 'beam' },
       { name: 'claw_swipe', damage: 25, range: 4, cooldown: 108, type: 'melee' },
@@ -264,7 +274,7 @@ export const BOSS_CONFIGS: Record<string, BossConfig> = {
     id: 'void_lord', name: 'THE VOID LORD', title: 'Destroyer of Reality',
     zone: 'zone9_void', maxHealth: 1200, damage: 35, speed: 75, defense: 15,
     phases: 4, phaseThresholds: [0.75, 0.5, 0.25, 0], maxSummons: 8,
-    sprite: 'hitman1',
+    sprite: 'mon_spinner',
     attacks: [
       { name: 'void_beam', damage: 30, range: 18, cooldown: 120, type: 'beam' },
       { name: 'reality_tear', damage: 20, range: 15, cooldown: 300, type: 'area' },
