@@ -797,10 +797,6 @@ export class GameEngine {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (soul as any).shootingFrames = 15;
 
-        // Tilt sprite toward shot direction
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (soul as any).verticalTilt = Math.abs(Math.sin(angle));
-
         // Muzzle flash particles
         this.particles.emit(
           soul.position.x + soul.facing.x * 0.5,
@@ -1064,6 +1060,10 @@ export class GameEngine {
       if (sf && sf > 0) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (soul as any).shootingFrames = sf - 1;
+        // When gun animation ends, reset facing.y so shot direction doesn't linger
+        if (sf - 1 <= 0) {
+          soul.facing.y = 0;
+        }
       }
 
       // Attack cooldown
