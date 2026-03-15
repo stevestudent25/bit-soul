@@ -761,7 +761,7 @@ export class Renderer {
   // ── HUD ─────────────────────────────────────────────────
   renderHUD(
     playerSoul: SoulEntity | undefined,
-    dungeonStats: { kills: number; gold: number; floor: number; enemiesLeft: number; items?: number },
+    dungeonStats: { kills: number; gold: number; floor: number; enemiesLeft: number; items?: number; zoneName?: string },
     matchTime: number,
     phase: string,
     killFeed: { text: string; color: string; time: number }[]
@@ -826,7 +826,7 @@ export class Renderer {
     this.ctx.textAlign = 'center';
     const cx = this.width / 2;
     this.ctx.fillStyle = '#a855f7';
-    this.ctx.fillText(`Floor ${dungeonStats.floor}`, cx, 20);
+    this.ctx.fillText(`${dungeonStats.zoneName ?? ''} — Floor ${dungeonStats.floor}`, cx, 20);
     this.ctx.font = '13px monospace';
     this.ctx.fillStyle = '#44ff44';
     this.ctx.fillText(`⚔ ${dungeonStats.kills}`, cx - 80, 20);

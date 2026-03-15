@@ -255,8 +255,8 @@ export class GameEngine {
     this.playerSoul = player;
     this.souls.push(player);
 
-    // Spawn enemies scattered around the map
-    const enemyCount = this.config.enemyCount + (this.currentFloor - 1) * 3;
+    // Spawn enemies scattered around the map (zone-based count)
+    const enemyCount = this.zoneManager.enemyCount + (this.currentFloor - 1) * 2;
     this.enemiesRemaining = enemyCount;
     for (let i = 0; i < enemyCount; i++) {
       let ex: number, ey: number;
@@ -1431,7 +1431,7 @@ export class GameEngine {
     this.weather.renderWeatherHUD(this.ctx, this.canvas.width - 160, 10);
     this.renderer.renderHUD(
       this.playerSoul || undefined,
-      { kills: this.playerKills, gold: this.playerGold, floor: this.currentFloor, enemiesLeft: this.enemiesRemaining, items: this.lootSystem.inventory.length },
+      { kills: this.playerKills, gold: this.playerGold, floor: this.currentFloor, enemiesLeft: this.enemiesRemaining, items: this.lootSystem.inventory.length, zoneName: this.zoneManager.zoneName },
       this.matchScore.matchTime,
       this.matchScore.phase,
       this.matchScore.killFeed,
