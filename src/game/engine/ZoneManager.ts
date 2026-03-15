@@ -85,6 +85,14 @@ export class ZoneManager {
 
     // Check if we've completed all floors in this zone
     if (this.state.currentFloor > zone.floorRange[1]) {
+      // If zone has no boss, auto-unlock the next zone
+      if (!zone.bossId) {
+        const nextIdx = this.state.currentZoneIndex + 1;
+        if (nextIdx < ZONES.length) {
+          this.state.zonesUnlocked.add(ZONES[nextIdx].id);
+        }
+      }
+
       // Move to next zone if available
       const nextIdx = this.state.currentZoneIndex + 1;
       if (nextIdx >= ZONES.length) {

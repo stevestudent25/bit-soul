@@ -135,16 +135,18 @@ export default function BitSoulGame() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [started, selectedClass]);
 
-  // ESC handler
+  // Detect engine quit (from pause menu "Quit to Menu")
   useEffect(() => {
     if (!started || !engineRef.current) return;
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.code === 'Escape' && engineRef.current) {
-        if (engineRef.current.state === 'paused') engineRef.current.resume();
+    const engine = engineRef.current;
+    const poll = setInterval(() => {
+      if (engine && engine.state === 'quit') {
+        clearInterval(poll);
+        setStarted(false);
+        setContinuing(false);
       }
-    };
-    window.addEventListener('keyup', handleKey);
-    return () => window.removeEventListener('keyup', handleKey);
+    }, 250);
+    return () => clearInterval(poll);
   }, [started]);
 
   if (!started) {

@@ -28,7 +28,7 @@ import { InventoryOverlay } from './InventoryOverlay';
 import { BOSS_CONFIGS } from '../data/ZoneData';
 import { CheckpointManager } from './CheckpointManager';
 
-export type GameState = 'loading' | 'menu' | 'playing' | 'paused' | 'post_match';
+export type GameState = 'loading' | 'menu' | 'playing' | 'paused' | 'post_match' | 'quit';
 
 export interface MatchScoreState {
   scores: Map<string, number>;
@@ -331,7 +331,10 @@ export class GameEngine {
 
   // ── Update ──────────────────────────────────────────────
   private update(): void {
-    if (this.state === 'paused') return;
+    if (this.state === 'paused') {
+      this.updatePauseMenu();
+      return;
+    }
     if (this.state !== 'playing') return;
 
     if (this.input.wasPressed('pause')) {
@@ -709,8 +712,9 @@ export class GameEngine {
         soul.velocity.y *= targetSpeed / curSpeed;
       }
 
-      soul.facing.x = dx;
+      // Update facing — preserve last horizontal direction for sprite flip
       soul.facing.y = dy;
+      if (dx !== 0) soul.facing.x = dx;
 
       // Footstep sounds
       this.footstepTimer--;
@@ -752,8 +756,10 @@ export class GameEngine {
         const aimDy = mouseWorld.y - soul.position.y;
         const angle = Math.atan2(aimDy, aimDx);
 
-        soul.facing.x = Math.cos(angle);
+        // Update facing — preserve horizontal direction for sprite flip
+        const aimCos = Math.cos(angle);
         soul.facing.y = Math.sin(angle);
+        if (Math.abs(aimCos) > 0.15) soul.facing.x = aimCos;
 
         this.bulletSystem.fire(
           { x: soul.position.x, y: soul.position.y },
@@ -1427,16 +1433,7 @@ export class GameEngine {
 
     // Paused overlay
     if (this.state === 'paused') {
-      this.ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-      this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-      this.ctx.fillStyle = '#ffffff';
-      this.ctx.font = 'bold 36px monospace';
-      this.ctx.textAlign = 'center';
-      this.ctx.fillText('PAUSED', this.canvas.width / 2, this.canvas.height / 2 - 20);
-      this.ctx.font = '16px monospace';
-      this.ctx.fillStyle = '#aaa';
-      this.ctx.fillText('Press ESC to resume', this.canvas.width / 2, this.canvas.height / 2 + 20);
-      this.ctx.textAlign = 'left';
+      this.renderPauseScreen();
     }
   }
 
@@ -1811,6 +1808,107 @@ export class GameEngine {
       this.state = 'playing';
       this.audio.playSFX('unpause', { volume: 0.3 });
     }
+  }
+
+  // ── Pause Menu ──────────────────────────────────────────
+
+  private getPauseButtons(): { label: string; y: number; w: number; h: number; x: number }[] {
+    const cx = this.canvas.width / 2;
+    const btnW = 260, btnH = 44;
+    const startY = this.canvas.height / 2 - 10;
+    const gap = 58;
+    const hasCheckpoint = this.checkpointManager.activeCheckpoint !== null;
+    const buttons = [
+      { label: 'RESUME', y: startY, w: btnW, h: btnH, x: cx - btnW / 2 },
+      ...(hasCheckpoint ? [{ label: 'RESET TO CHECKPOINT', y: startY + gap, w: btnW, h: btnH, x: cx - btnW / 2 }] : []),
+      { label: 'QUIT TO MENU', y: startY + gap * (hasCheckpoint ? 2 : 1), w: btnW, h: btnH, x: cx - btnW / 2 },
+    ];
+    return buttons;
+  }
+
+  private updatePauseMenu(): void {
+    // ESC to resume
+    if (this.input.wasPressed('pause')) {
+      this.resume();
+      return;
+    }
+
+    // Check button clicks
+    if (this.input.wasMouseClicked()) {
+      const m = this.input.getMousePos();
+      const buttons = this.getPauseButtons();
+      for (const btn of buttons) {
+        if (m.x >= btn.x && m.x <= btn.x + btn.w && m.y >= btn.y && m.y <= btn.y + btn.h) {
+          this.audio.playSFX('menu_click', { volume: 0.4 });
+          if (btn.label === 'RESUME') {
+            this.resume();
+          } else if (btn.label === 'RESET TO CHECKPOINT') {
+            const respawn = this.checkpointManager.onPlayerDeath();
+            if (respawn) {
+              this.state = 'playing';
+              this.executeCheckpointRespawn(respawn.respawnPos, respawn.hpFraction);
+              this.addKillFeed('↩ Reset to last checkpoint', '#44DDFF');
+            }
+          } else if (btn.label === 'QUIT TO MENU') {
+            this.state = 'quit';
+            this.stop();
+            this.audio.stopMusic();
+            this.audio.stopAllAmbient(0);
+          }
+          return;
+        }
+      }
+    }
+  }
+
+  private renderPauseScreen(): void {
+    const cx = this.canvas.width / 2;
+
+    // Dark overlay
+    this.ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+    this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+    // Title
+    this.ctx.fillStyle = '#ffffff';
+    this.ctx.font = 'bold 40px monospace';
+    this.ctx.textAlign = 'center';
+    this.ctx.fillText('PAUSED', cx, this.canvas.height / 2 - 80);
+
+    // Stats line
+    this.ctx.font = '13px monospace';
+    this.ctx.fillStyle = '#888';
+    const mins = Math.floor(this.matchScore.matchTime / 3600);
+    const secs = Math.floor((this.matchScore.matchTime % 3600) / 60);
+    this.ctx.fillText(
+      `Floor ${this.currentFloor}  •  ${this.zoneManager.zoneName}  •  ${mins}:${secs.toString().padStart(2, '0')}`,
+      cx, this.canvas.height / 2 - 50,
+    );
+
+    // Buttons
+    const mouse = this.input.getMousePos();
+    const buttons = this.getPauseButtons();
+    for (const btn of buttons) {
+      const hovered = mouse.x >= btn.x && mouse.x <= btn.x + btn.w && mouse.y >= btn.y && mouse.y <= btn.y + btn.h;
+
+      // Button background
+      this.ctx.fillStyle = hovered ? 'rgba(136, 68, 255, 0.5)' : 'rgba(136, 68, 255, 0.2)';
+      this.ctx.fillRect(btn.x, btn.y, btn.w, btn.h);
+      this.ctx.strokeStyle = hovered ? '#c084fc' : '#6633aa';
+      this.ctx.lineWidth = hovered ? 2 : 1;
+      this.ctx.strokeRect(btn.x, btn.y, btn.w, btn.h);
+
+      // Button text
+      this.ctx.fillStyle = hovered ? '#ffffff' : '#cccccc';
+      this.ctx.font = 'bold 15px monospace';
+      this.ctx.fillText(btn.label, cx, btn.y + btn.h / 2 + 5);
+    }
+
+    // Hint
+    this.ctx.font = '11px monospace';
+    this.ctx.fillStyle = '#555';
+    const lastBtn = buttons[buttons.length - 1];
+    this.ctx.fillText('Press ESC to resume', cx, lastBtn.y + lastBtn.h + 30);
+    this.ctx.textAlign = 'left';
   }
 
   handlePauseToggle(): void {
