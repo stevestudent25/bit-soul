@@ -8,14 +8,17 @@ Visit the [live game](https://stevestudent25.github.io/bit-soul/) on GitHub Page
 
 ## Features
 
-- **5 Playable Classes** — Soldier, Hitman, Robot, Survivor, Scout — each with unique stats and playstyle
+- **5 Playable Classes** — Soldier, Hitman, Robot, Survivor, Scout — each with unique stats, abilities, and playstyle
+- **9 Zones & 8 Bosses** — Haven Village, Darkwood Forest, Crystal Caves, Murkmire Swamp, Ancient Ruins, Iron Fortress, Scorching Desert, Magma Fortress, and The Dark Realm — each with a unique boss encounter
 - **Procedural Dungeons** — Every floor is procedurally generated with rooms, corridors, and obstacles
-- **Combat System** — Projectile-based shooting with 4 weapon types, muzzle flash, hitstop on crits
-- **AI Enemies** — Pathfinding enemies that chase, attack, and react to the player
-- **Loot & Items** — Breakable props, chests, and item drops with rarity tiers
-- **Audio System** — Dynamic music, ambient soundscapes, and spatial SFX
+- **Combat System** — Projectile-based shooting with 4 weapon types, muzzle flash, hitstop on crits, and 4 class abilities (Q/E/R/F)
+- **AI Enemies** — Pathfinding enemies that chase, attack, and scale with floor difficulty
+- **Loot & Inventory** — Breakable props, chests, enemy drops with rarity tiers (Common to Legendary), equipment slots, quick-use consumables, and an in-game store
+- **Item Color System** — Rarity-based color coding for loot drops, inventory, and gold tier visualization
+- **Checkpoint System** — Auto-save checkpoints across all 9 zones with death respawn, hidden checkpoints to discover, and Continue Game support
+- **Audio System** — Dynamic music, ambient soundscapes, and spatial SFX with 70+ sound effects
 - **Weather Effects** — Rain, fog, and atmospheric particles
-- **Sprint & Physics** — Acceleration/deceleration movement with sprint stamina
+- **Sprint & Physics** — Acceleration/deceleration movement with sprint stamina and dash ability
 
 ## Controls
 
@@ -25,17 +28,21 @@ Visit the [live game](https://stevestudent25.github.io/bit-soul/) on GitHub Page
 | Mouse | Aim |
 | Left Click | Shoot |
 | Shift | Sprint |
+| Space | Dash |
+| Q / E / R / F | Class Abilities |
 | R | Reload |
-| E | Interact / Pick up |
+| Tab / I | Inventory |
+| 1-4 | Quick Slots |
 | ESC | Pause |
 
 ## Tech Stack
 
 - **TypeScript** + **React 19** — UI and game component
-- **Vite** — Build tooling
+- **Vite 7** — Build tooling with single-file output
 - **HTML5 Canvas** — Custom 2D rendering engine
 - **Web Audio API** — Spatial audio and music system
 - **Tailwind CSS 4** — UI styling
+- **GitHub Pages** — Hosted via GitHub Actions CI/CD
 
 ## Development
 

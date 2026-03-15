@@ -19,8 +19,14 @@ import { BulletSystem, WEAPONS, type WeaponState } from './BulletSystem';
 import { LootSystem } from './LootSystem';
 import { AudioManager } from './AudioManager';
 import { rollLoot, BREAKABLE_LOOT, CHEST_LOOT, ENEMY_LOOT, ITEMS } from '../data/ItemDatabase';
+import { getRarityTextColor, getGoldTierColors } from '../data/ItemColorSystem';
 import { createSoul } from '../systems/SoulFactory';
 import { processAttack, tickSoul } from '../systems/CombatEngine';
+import { BossSystem } from './BossSystem';
+import { ZoneManager } from './ZoneManager';
+import { InventoryOverlay } from './InventoryOverlay';
+import { BOSS_CONFIGS } from '../data/ZoneData';
+import { CheckpointManager } from './CheckpointManager';
 
 export type GameState = 'loading' | 'menu' | 'playing' | 'paused' | 'post_match';
 
@@ -85,6 +91,10 @@ export class GameEngine {
   bulletSystem = new BulletSystem();
   lootSystem = new LootSystem();
   audio = new AudioManager();
+  bossSystem = new BossSystem();
+  zoneManager = new ZoneManager();
+  inventory = new InventoryOverlay();
+  checkpointManager = new CheckpointManager();
   playerWeapon: WeaponState = {
     weapon: WEAPONS.pistol,
     ammo: WEAPONS.pistol.magSize,
@@ -95,6 +105,7 @@ export class GameEngine {
   private footstepTimer = 0;
   private lastPlayerHp = 0;
   private musicStarted = false;
+  private matchWon = false;
 
   // Internal
   private canvas!: HTMLCanvasElement;
@@ -110,6 +121,8 @@ export class GameEngine {
 
   constructor(config: Partial<GameConfig> = {}) {
     this.config = { ...DEFAULT_GAME_CONFIG, ...config };
+    this.bossSystem.audio = this.audio;
+    this.inventory.audio = this.audio;
   }
 
   // ── Initialization ──────────────────────────────────────
@@ -165,6 +178,63 @@ export class GameEngine {
     this.state = 'menu';
   }
 
+  /** Restore game state from a checkpoint save (called after init for Continue Game) */
+  loadFromSave(): boolean {
+    const save = CheckpointManager.loadSave();
+    if (!save) return false;
+
+    // Restore zone & floor state
+    this.zoneManager.restoreFromSave(save.zoneNumber, save.currentFloor, save.bossesDefeated);
+    this.currentFloor = save.currentFloor;
+    this.playerGold = save.playerGold;
+    this.playerKills = save.playerKills;
+
+    // Regenerate world for the saved floor
+    const seed = Math.floor(Math.random() * 999999);
+    this.map = generateWorld({
+      width: this.config.mapWidth,
+      height: this.config.mapHeight,
+      seed,
+      tileSize: this.config.tileSize,
+      floor: this.currentFloor,
+    });
+    this.pathfinder = new PathFinder(this.map);
+
+    // Respawn player and enemies for this floor
+    this.spawnSouls();
+
+    // Restore player HP / mana
+    if (this.playerSoul) {
+      this.playerSoul.vitals.hpMax = save.playerHpMax;
+      this.playerSoul.vitals.hp = save.playerHp;
+      this.playerSoul.vitals.manaMax = save.playerManaMax;
+      this.playerSoul.vitals.mana = save.playerMana;
+      this.camera.centerOn(this.playerSoul.position);
+    }
+
+    // Restore inventory
+    this.inventory = new InventoryOverlay();
+    this.inventory.audio = this.audio;
+    for (const itemId of save.inventorySnapshot) {
+      this.inventory.addItem(itemId, 1);
+    }
+    // Restore equipment (equip saved items)
+    const eqSlots: Array<'weapon' | 'armor' | 'accessory' | 'shield'> = ['weapon', 'armor', 'accessory', 'shield'];
+    for (const itemId of save.equipmentSnapshot) {
+      for (const slot of eqSlots) {
+        if (!this.inventory.equipment[slot]) {
+          this.inventory.equipment[slot] = itemId;
+          break;
+        }
+      }
+    }
+
+    // Update match score label
+    this.matchScore.phase = this.zoneManager.getPhaseLabel();
+
+    return true;
+  }
+
   private renderLoadingFrame(): void {
     this.renderer.renderLoadingScreen(this.loadProgress, this.loadMessage);
   }
@@ -210,6 +280,14 @@ export class GameEngine {
 
       this.souls.push(enemy);
     }
+
+    // Setup checkpoints for starting zone
+    this.checkpointManager.clearZone();
+    this.checkpointManager.setupZone(
+      this.zoneManager.currentZoneNumber,
+      centerX, centerY,
+      (x, y) => this.findPassableTile(x, y),
+    );
   }
 
   // ── Game Loop ── ────────────────────────────────────────
@@ -217,7 +295,7 @@ export class GameEngine {
     if (this.running) return;
     this.running = true;
     this.state = 'playing';
-    this.matchScore.phase = 'Floor ' + this.currentFloor;
+    this.matchScore.phase = this.zoneManager.getPhaseLabel();
     this.matchScore.matchTime = 0;
 
     // Start dungeon music
@@ -257,20 +335,84 @@ export class GameEngine {
     if (this.state !== 'playing') return;
 
     if (this.input.wasPressed('pause')) {
+      if (this.inventory.isOpen) {
+        this.inventory.close();
+        return;
+      }
       this.state = 'paused';
       this.audio.playSFX('pause', { volume: 0.3 });
       return;
     }
 
-    this.matchScore.phase = `Floor ${this.currentFloor}`;
+    // Inventory toggle (Tab / I)
+    if (this.input.wasPressed('inventory')) {
+      this.inventory.toggle();
+      this.audio.playSFX(this.inventory.isOpen ? 'inventory_open' : 'inventory_close', { volume: 0.3 });
+    }
+
+    // Quick slot usage (1-4)
+    if (this.playerSoul && this.playerSoul.isAlive && !this.inventory.isOpen) {
+      const quickActions: Array<'quick_1' | 'quick_2' | 'quick_3' | 'quick_4'> = ['quick_1', 'quick_2', 'quick_3', 'quick_4'];
+      for (let i = 0; i < quickActions.length; i++) {
+        if (this.input.wasPressed(quickActions[i])) {
+          const usedId = this.inventory.useQuickSlot(i, this.playerSoul);
+          if (usedId) {
+            const def = ITEMS[usedId];
+            if (def?.effects) {
+              this.applyItemEffects(def.effects);
+              this.audio.playSFX('potion_drink', { volume: 0.5 });
+              this.addKillFeed(`Used ${def.name}`, getRarityTextColor(def.rarity));
+            }
+          }
+        }
+      }
+    }
+
+    // If inventory is open, skip game updates (freeze gameplay)
+    if (this.inventory.isOpen) {
+      this.inventory.update(this.input.getMousePos().x, this.input.getMousePos().y, this.canvas.width, this.canvas.height);
+      // Handle inventory clicks
+      if (this.input.wasMouseClicked() && this.playerSoul) {
+        const result = this.inventory.handleClick(
+          this.input.getMousePos().x, this.input.getMousePos().y,
+          this.canvas.width, this.canvas.height,
+          this.playerGold, this.playerSoul, this.zoneManager.currentZoneNumber,
+        );
+        if (result.goldChange !== 0) {
+          this.playerGold += result.goldChange;
+          if (result.goldChange < 0) {
+            this.audio.playSFX('coin_pickup', { volume: 0.4 });
+          } else {
+            this.audio.playSFX('collect_points', { volume: 0.4 });
+          }
+        }
+        if (result.usedItemId) {
+          const def = ITEMS[result.usedItemId];
+          if (def?.effects) {
+            this.applyItemEffects(def.effects);
+            this.audio.playSFX('potion_drink', { volume: 0.5 });
+          }
+        }
+      }
+      return;
+    }
+
+    this.matchScore.phase = this.zoneManager.getPhaseLabel();
     this.matchScore.matchTime++;
 
-    // Check if player died → game over
+    // Check if player died → checkpoint respawn or game over
     if (this.playerSoul && !this.playerSoul.isAlive) {
       this.audio.playSFX('player_death', { volume: 0.7 });
-      this.audio.stopMusic(1500);
-      this.audio.stopAllAmbient(1500);
-      this.endMatch();
+      const respawn = this.checkpointManager.onPlayerDeath();
+      if (respawn) {
+        // Respawn at checkpoint
+        this.executeCheckpointRespawn(respawn.respawnPos, respawn.hpFraction);
+      } else {
+        // No checkpoint — true game over
+        this.audio.stopMusic(1500);
+        this.audio.stopAllAmbient(1500);
+        this.endMatch();
+      }
       return;
     }
 
@@ -291,7 +433,7 @@ export class GameEngine {
 
     // Last enemies standing — desperate boost
     if (this.enemiesRemaining <= 3 && this.enemiesRemaining > 0) {
-      this.matchScore.phase = `Floor ${this.currentFloor} — DESPERATE HOUR`;
+      this.matchScore.phase = `${this.zoneManager.zoneName} — DESPERATE HOUR`;
       for (const s of this.souls) {
         if (s.teamId === 'enemy' && s.isAlive) {
           s.combat.attackPower *= 1.001;
@@ -318,7 +460,93 @@ export class GameEngine {
     this.updateResources();
     this.updateLoot();
     this.updateDynamicEvents();
+    this.updateCheckpoints();
     this.particles.update();
+
+    // Boss system update
+    if (this.bossSystem.isActive && this.playerSoul) {
+      this.bossSystem.update(
+        this.playerSoul.position,
+        this.souls,
+        (pos: Vector2) => {
+          // Spawn a minion at given position
+          const cls = [SoulClass.Soldier, SoulClass.Hitman, SoulClass.Robot][Math.floor(Math.random() * 3)];
+          const minion = createSoul(cls, 'enemy', pos, Date.now() + Math.random() * 99999);
+          const floorMult = this.zoneManager.getFloorMultiplier();
+          minion.combat.attackPower = Math.floor(minion.combat.attackPower * floorMult * 0.6);
+          minion.vitals.hpMax = Math.floor(minion.vitals.hpMax * floorMult * 0.5);
+          minion.vitals.hp = minion.vitals.hpMax;
+          minion.name = 'Minion';
+          this.souls.push(minion);
+          this.particles.emit(pos.x, pos.y, 8, { color: '#ff4444', speed: 0.08, size: 3, life: 15 });
+          return minion;
+        },
+        (target: SoulEntity, damage: number, kb: Vector2) => {
+          // Skip damage if player is invincible from checkpoint respawn
+          if (target === this.playerSoul && this.checkpointManager.isInvincible) return;
+
+          target.vitals.hp -= damage;
+          target.velocity.x += kb.x;
+          target.velocity.y += kb.y;
+          this.damageNumbers.add(target.position, damage, { isCrit: false, isHeal: false });
+          this.screenShake.shake(4, 8);
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (target as any).hitFlash = 8;
+          this.audio.playSFX('hit_flesh', { volume: 0.5 });
+          if (target.vitals.hp <= 0) {
+            target.vitals.hp = 0;
+            target.isAlive = false;
+            if (target === this.playerSoul) {
+              this.audio.playSFX('player_death', { volume: 0.7 });
+              // Let the main update loop handle respawn/game-over on next frame
+            }
+          }
+        },
+      );
+
+      // Boss died
+      if (this.bossSystem.boss && !this.bossSystem.boss.isAlive && !this.bossSystem.bossState?.isDefeated) {
+        const cfg = this.bossSystem.defeatBoss();
+        if (cfg) {
+          this.zoneManager.defeatBoss(cfg.id);
+          this.addKillFeed(`🏆 ${cfg.name} DEFEATED!`, '#FFD700');
+          this.audio.playSFX('combo_clear', { volume: 0.8 });
+          this.audio.playSFX('achievement', { volume: 0.8, delay: 500 });
+          this.audio.playMusic('music_dungeon', { fadeIn: 2000 });
+          this.screenShake.shake(15, 30);
+          this.particles.deathEffect(
+            this.bossSystem.boss!.position.x,
+            this.bossSystem.boss!.position.y,
+            '#ff4444',
+          );
+
+          // Drop boss loot
+          const goldAmt = cfg.goldDrop[0] + Math.floor(Math.random() * (cfg.goldDrop[1] - cfg.goldDrop[0]));
+          this.playerGold += goldAmt;
+          const goldColor = getGoldTierColors(goldAmt).textColor;
+          this.addKillFeed(`💰 +${goldAmt} gold!`, goldColor);
+
+          // Guaranteed loot drops
+          for (const itemId of cfg.guaranteedLoot) {
+            this.inventory.addItem(itemId, 1);
+            const def = ITEMS[itemId];
+            if (def) this.addKillFeed(`💎 Got ${def.name}!`, getRarityTextColor(def.rarity));
+          }
+
+          // Random loot rolls
+          for (const drop of cfg.loot) {
+            if (Math.random() < drop.chance) {
+              this.inventory.addItem(drop.item, 1);
+              const def = ITEMS[drop.item];
+              if (def) this.addKillFeed(`💎 Got ${def.name}!`, getRarityTextColor(def.rarity));
+            }
+          }
+
+          // Auto-save on boss defeat
+          this.triggerAutoSave();
+        }
+      }
+    }
 
     if (this.playerSoul?.isAlive) {
       this.camera.follow(this.playerSoul.position);
@@ -331,12 +559,31 @@ export class GameEngine {
   }
 
   private advanceFloor(): void {
-    this.currentFloor++;
-    this.addKillFeed(`⚡ FLOOR ${this.currentFloor} — Enemies grow stronger!`, '#FFD700');
+    const zoneResult = this.zoneManager.advanceFloor();
+    this.currentFloor = this.zoneManager.state.currentFloor;
+
+    if (zoneResult === 'game_complete') {
+      this.matchWon = true;
+      this.addKillFeed('🏆 ALL ZONES CONQUERED! YOU WIN!', '#FFD700');
+      this.audio.playSFX('achievement', { volume: 0.8 });
+      this.audio.playMusic('music_victory', { fadeIn: 1000, loop: false });
+      this.endMatch();
+      return;
+    }
+
+    if (zoneResult === 'next_zone') {
+      this.addKillFeed(`⚡ Entering ${this.zoneManager.zoneName}!`, '#FFD700');
+      this.audio.playSFX('zone_transition', { volume: 0.6 });
+      // Auto-save on zone transition
+      this.triggerAutoSave();
+    } else {
+      this.addKillFeed(`⚡ FLOOR ${this.currentFloor} — Enemies grow stronger!`, '#FFD700');
+    }
+
     this.audio.playSFX('achievement', { volume: 0.6 });
-    this.audio.playSFX('zone_transition', { volume: 0.4, delay: 300 });
     this.bulletSystem.clear();
     this.lootSystem.clear();
+    this.bossSystem.clear();
 
     // Heal player partially
     if (this.playerSoul) {
@@ -367,10 +614,12 @@ export class GameEngine {
     oldPlayer.velocity.x = 0;
     oldPlayer.velocity.y = 0;
 
-    // Spawn new enemies
+    // Spawn new enemies (zone-based count)
     const enemyClasses = [SoulClass.Soldier, SoulClass.Hitman, SoulClass.Robot, SoulClass.Survivor, SoulClass.Scout];
-    const enemyCount = this.config.enemyCount + (this.currentFloor - 1) * 3;
+    const enemyCount = this.zoneManager.enemyCount + (this.currentFloor - 1) * 2;
     this.enemiesRemaining = enemyCount;
+    const floorMult = this.zoneManager.getFloorMultiplier();
+
     for (let i = 0; i < enemyCount; i++) {
       let ex: number, ey: number;
       let attempts = 0;
@@ -382,11 +631,39 @@ export class GameEngine {
 
       const cls = enemyClasses[i % enemyClasses.length];
       const enemy = createSoul(cls, 'enemy', { x: ex, y: ey }, Date.now() + i + 1);
-      const floorMult = 1 + (this.currentFloor - 1) * 0.15;
       enemy.combat.attackPower = Math.floor(enemy.combat.attackPower * floorMult);
       enemy.vitals.hpMax = Math.floor(enemy.vitals.hpMax * floorMult);
       enemy.vitals.hp = enemy.vitals.hpMax;
       this.souls.push(enemy);
+    }
+
+    // Setup checkpoints for this zone
+    this.checkpointManager.clearZone();
+    const cpCenterX = Math.floor(this.config.mapWidth / 2);
+    const cpCenterY = Math.floor(this.config.mapHeight / 2);
+    this.checkpointManager.setupZone(
+      this.zoneManager.currentZoneNumber,
+      cpCenterX, cpCenterY,
+      (x, y) => this.findPassableTile(x, y),
+    );
+
+    // Spawn boss if this is a boss floor
+    if (zoneResult === 'boss_floor' || this.zoneManager.shouldSpawnBoss()) {
+      const bossId = this.zoneManager.getBossId();
+      if (bossId) {
+        const bossSpawn = this.findPassableTile(
+          Math.floor(this.config.mapWidth * 0.7),
+          Math.floor(this.config.mapHeight * 0.5),
+        );
+        const boss = this.bossSystem.spawnBoss(bossId, bossSpawn, floorMult);
+        if (boss) {
+          this.souls.push(boss);
+          this.zoneManager.markBossSpawned();
+          this.addKillFeed(`💀 ${BOSS_CONFIGS[bossId].name} has appeared!`, '#ff4444');
+          this.audio.playSFX('alert_siren', { volume: 0.6 });
+          this.audio.playMusic('music_boss', { fadeIn: 1000 });
+        }
+      }
     }
 
     this.attackCooldowns.clear();
@@ -495,6 +772,10 @@ export class GameEngine {
         ws.ammo--;
         ws.cooldown = ws.weapon.fireRate;
 
+        // Gun raise animation — show _gun pose for 15 frames
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (soul as any).shootingFrames = 15;
+
         // Muzzle flash particles
         this.particles.emit(
           soul.position.x + soul.facing.x * 0.5,
@@ -567,6 +848,9 @@ export class GameEngine {
     // Check hits
     const hits = this.bulletSystem.checkHits(this.souls);
     for (const { bullet, target } of hits) {
+      // Skip damage if player is invincible from checkpoint respawn
+      if (target === this.playerSoul && this.checkpointManager.isInvincible) continue;
+
       // Apply damage directly (bypass processAttack for bullets)
       const isCrit = Math.random() < 0.08;
       const dmg = isCrit ? Math.floor(bullet.damage * 1.5) : bullet.damage;
@@ -661,6 +945,9 @@ export class GameEngine {
                 angle, WEAPONS.pistol, soul.id, soul.teamId, soul.physical.colorPrimary,
               );
               this.attackCooldowns.set(soul.id, Math.floor(60 / soul.combat.attackSpeed));
+              // AI gun raise animation
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              (soul as any).shootingFrames = 15;
               // AI muzzle flash
               this.particles.emit(
                 soul.position.x + Math.cos(angle) * 0.4,
@@ -746,6 +1033,14 @@ export class GameEngine {
       // Regen and cooldowns
       tickSoul(soul, 1);
 
+      // Tick gun animation frame counter
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const sf = (soul as any).shootingFrames as number | undefined;
+      if (sf && sf > 0) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (soul as any).shootingFrames = sf - 1;
+      }
+
       // Attack cooldown
       const cd = this.attackCooldowns.get(soul.id) || 0;
       if (cd > 0) this.attackCooldowns.set(soul.id, cd - 1);
@@ -830,9 +1125,9 @@ export class GameEngine {
           const loot = rollLoot(CHEST_LOOT, 2 + Math.floor(this.currentFloor / 3), this.currentFloor);
           this.lootSystem.spawnDrops(loot, s.position);
           this.particles.emit(s.position.x, s.position.y, 12, {
-            color: '#FFD700', speed: 0.08, size: 3, life: 25, spread: Math.PI * 2,
+            color: '#DDBB33', speed: 0.08, size: 3, life: 25, spread: Math.PI * 2,
           });
-          this.addKillFeed('💎 Chest opened!', '#FFD700');
+          this.addKillFeed('💎 Chest opened!', '#DDBB33');
           this.audio.playSFX('chest_open', { volume: 0.5 });
           this.audio.playSFX('power_up_2', { volume: 0.35, delay: 200 });
           this.map.structures.splice(i, 1);
@@ -890,6 +1185,8 @@ export class GameEngine {
     // Apply consumable effects from picked-up items
     for (const itemId of pickupResult.itemsPickedUp) {
       const def = ITEMS[itemId];
+      // Add to inventory overlay
+      this.inventory.addItem(itemId, 1);
       if (def && def.category === 'consumable' && def.effects) {
         this.applyItemEffects(def.effects);
         this.audio.playSFX('item_pickup', { volume: 0.4, randomPitch: true });
@@ -1052,6 +1349,8 @@ export class GameEngine {
     this.renderer.renderTiles(this.map, this.camera, this.textures);
     this.renderer.renderResources(this.map, this.camera);
     this.renderer.renderStructures(this.map, this.camera, this.textures);
+    this.renderer.renderCheckpoints(this.checkpointManager.checkpoints, this.camera, this.frameCount);
+    this.renderer.renderCheckpointFlash(this.checkpointManager.getActivationFlash(), this.camera);
     this.renderer.renderLootDrops(this.lootSystem.drops, this.camera, this.frameCount, this.textures);
     this.renderer.renderSouls(this.souls, this.camera, this.playerSoul?.id || '', this.textures);
     this.renderer.renderBullets(this.bulletSystem.bullets, this.camera);
@@ -1107,6 +1406,25 @@ export class GameEngine {
     );
     this.renderer.renderAmmoHUD(this.playerWeapon);
 
+    // Boss health bar
+    if (this.bossSystem.isBossAlive) {
+      this.bossSystem.renderBossHealthBar(this.ctx, this.canvas.width);
+    }
+
+    // Checkpoint save indicator
+    this.renderer.renderSaveIndicator(this.checkpointManager.getSaveIndicator());
+
+    // Invincibility shimmer after checkpoint respawn
+    if (this.checkpointManager.isInvincible && this.playerSoul?.isAlive) {
+      this.renderer.renderInvincibleOverlay(this.playerSoul.position, this.camera, this.frameCount);
+    }
+
+    // Inventory overlay (renders on top of everything)
+    this.inventory.render(
+      this.ctx, this.canvas.width, this.canvas.height,
+      this.playerGold, this.playerSoul || null, this.zoneManager.currentZoneNumber,
+    );
+
     // Paused overlay
     if (this.state === 'paused') {
       this.ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
@@ -1133,10 +1451,18 @@ export class GameEngine {
 
     const cx = this.canvas.width / 2;
 
-    this.ctx.fillStyle = '#ff4444';
-    this.ctx.font = 'bold 48px monospace';
-    this.ctx.textAlign = 'center';
-    this.ctx.fillText('YOU DIED', cx, 100);
+    // Title — victory or death
+    if (this.matchWon) {
+      this.ctx.fillStyle = '#FFD700';
+      this.ctx.font = 'bold 48px monospace';
+      this.ctx.textAlign = 'center';
+      this.ctx.fillText('VICTORY', cx, 100);
+    } else {
+      this.ctx.fillStyle = '#ff4444';
+      this.ctx.font = 'bold 48px monospace';
+      this.ctx.textAlign = 'center';
+      this.ctx.fillText('YOU DIED', cx, 100);
+    }
 
     // Stats
     this.ctx.font = '22px monospace';
@@ -1158,10 +1484,24 @@ export class GameEngine {
     this.ctx.font = '12px monospace';
     this.ctx.fillStyle = '#666';
     let y = 320;
-    for (const entry of this.matchScore.killFeed.slice(-8)) {
+    for (const entry of this.matchScore.killFeed.slice(-6)) {
       this.ctx.fillText(entry.text, cx, y);
       y += 16;
     }
+
+    // Credits
+    y = Math.max(y + 20, 430);
+    this.ctx.fillStyle = '#555';
+    this.ctx.font = '12px monospace';
+    this.ctx.fillText('— CREDITS —', cx, y);
+    y += 22;
+    this.ctx.fillStyle = '#a855f7';
+    this.ctx.font = 'bold 14px monospace';
+    this.ctx.fillText('Created by', cx, y);
+    y += 20;
+    this.ctx.fillStyle = '#FFD700';
+    this.ctx.font = 'bold 16px monospace';
+    this.ctx.fillText('stevestudent   battledoze   steve embry', cx, y);
 
     // Play again button
     const btnW = 220, btnH = 50;
@@ -1186,6 +1526,157 @@ export class GameEngine {
         this.restart();
       }
     }
+  }
+
+  // ── Checkpoint System ────────────────────────────────────
+
+  private updateCheckpoints(): void {
+    if (!this.playerSoul || !this.playerSoul.isAlive) return;
+
+    this.checkpointManager.update(this.playerSoul.position, this.frameCount);
+
+    // Consume heal from checkpoint activation
+    const heal = this.checkpointManager.consumeHeal();
+    if (heal > 0) {
+      const soul = this.playerSoul;
+      const actual = Math.min(heal, soul.vitals.hpMax - soul.vitals.hp);
+      soul.vitals.hp = Math.min(soul.vitals.hpMax, soul.vitals.hp + heal);
+      if (actual > 0) {
+        this.damageNumbers.add(soul.position, actual, { isCrit: false, isHeal: true });
+      }
+      this.audio.playSFX('checkpoint_activate' as string, { volume: 0.6 });
+      this.particles.emit(soul.position.x, soul.position.y, 12, {
+        color: '#44DDFF', speed: 0.06, size: 2, life: 25, spread: Math.PI * 2,
+      });
+    }
+
+    // Checkpoint just activated — auto save + feed message
+    if (this.checkpointManager.wasJustActivated()) {
+      const cp = this.checkpointManager.activeCheckpoint;
+      if (cp) {
+        cp.zoneNumber = this.zoneManager.currentZoneNumber;
+        this.addKillFeed(`✦ Checkpoint: ${cp.name}`, '#44DDFF');
+        this.triggerAutoSave();
+      }
+    }
+
+    // Periodic auto-save (every ~5 minutes)
+    if (this.checkpointManager.shouldAutoSave()) {
+      this.triggerAutoSave();
+    }
+
+    // Invincibility: reduce damage to 0
+    if (this.checkpointManager.isInvincible) {
+      // Handled in damage application — the player flashes but takes no damage
+    }
+  }
+
+  private executeCheckpointRespawn(respawnPos: Vector2, hpFraction: number): void {
+    if (!this.playerSoul) return;
+
+    const soul = this.playerSoul;
+
+    // Revive the player
+    soul.isAlive = true;
+    soul.vitals.hp = Math.floor(soul.vitals.hpMax * hpFraction);
+    soul.vitals.mana = soul.vitals.manaMax;
+    soul.vitals.stamina = soul.vitals.staminaMax;
+    soul.position.x = respawnPos.x;
+    soul.position.y = respawnPos.y;
+    soul.velocity.x = 0;
+    soul.velocity.y = 0;
+
+    // Start invincibility
+    this.checkpointManager.startRespawnInvincibility();
+
+    // Respawn all dead enemies (clear dead, spawn fresh)
+    this.respawnEnemies();
+
+    // Reset boss if boss fight was in progress
+    if (this.bossSystem.isActive && this.bossSystem.boss) {
+      const bossId = this.zoneManager.getBossId();
+      if (bossId) {
+        // Reset boss to full HP
+        this.bossSystem.clear();
+        const floorMult = this.zoneManager.getFloorMultiplier();
+        const bossSpawn = this.findPassableTile(
+          Math.floor(this.config.mapWidth * 0.7),
+          Math.floor(this.config.mapHeight * 0.5),
+        );
+        const boss = this.bossSystem.spawnBoss(bossId, bossSpawn, floorMult);
+        if (boss) {
+          this.souls.push(boss);
+          this.addKillFeed(`💀 ${BOSS_CONFIGS[bossId].name} has reformed!`, '#ff4444');
+        }
+      }
+    }
+
+    // Camera snap
+    this.camera.centerOn(soul.position);
+
+    // Visual/audio feedback
+    this.particles.emit(respawnPos.x, respawnPos.y, 20, {
+      color: '#44DDFF', speed: 0.08, size: 3, life: 30, spread: Math.PI * 2,
+    });
+    this.screenShake.shake(6, 12);
+    this.audio.playSFX('respawn' as string, { volume: 0.6 });
+
+    const deaths = this.checkpointManager.deathCount;
+    this.addKillFeed(`💀 Death #${deaths} — Respawned at checkpoint`, '#44DDFF');
+
+    this.lastPlayerHp = soul.vitals.hp;
+  }
+
+  private respawnEnemies(): void {
+    // Remove all dead enemies, keep alive ones
+    this.souls = this.souls.filter(s => s === this.playerSoul || (s.teamId === 'enemy' && s.isAlive));
+
+    // Count current alive enemies
+    const aliveEnemies = this.souls.filter(s => s.teamId === 'enemy' && s.isAlive).length;
+    const targetCount = this.zoneManager.enemyCount + (this.currentFloor - 1) * 2;
+    const toSpawn = Math.max(0, targetCount - aliveEnemies);
+
+    const enemyClasses = [SoulClass.Soldier, SoulClass.Hitman, SoulClass.Robot, SoulClass.Survivor, SoulClass.Scout];
+    const floorMult = this.zoneManager.getFloorMultiplier();
+
+    for (let i = 0; i < toSpawn; i++) {
+      let ex: number, ey: number;
+      let attempts = 0;
+      do {
+        ex = 3 + Math.floor(Math.random() * (this.config.mapWidth - 6));
+        ey = 3 + Math.floor(Math.random() * (this.config.mapHeight - 6));
+        attempts++;
+      } while (attempts < 50 && (!this.map.tiles[ey]?.[ex]?.isPassable ||
+        (this.playerSoul && this.dist({ x: ex, y: ey }, this.playerSoul.position) < 10)));
+
+      const cls = enemyClasses[i % enemyClasses.length];
+      const enemy = createSoul(cls, 'enemy', { x: ex, y: ey }, Date.now() + i + 1);
+      enemy.combat.attackPower = Math.floor(enemy.combat.attackPower * floorMult);
+      enemy.vitals.hpMax = Math.floor(enemy.vitals.hpMax * floorMult);
+      enemy.vitals.hp = enemy.vitals.hpMax;
+      this.souls.push(enemy);
+    }
+
+    this.enemiesRemaining = this.souls.filter(s => s.teamId === 'enemy' && s.isAlive).length;
+  }
+
+  private triggerAutoSave(): void {
+    if (!this.playerSoul) return;
+
+    this.checkpointManager.autoSave({
+      zoneNumber: this.zoneManager.currentZoneNumber,
+      currentFloor: this.currentFloor,
+      playerClass: this.config.playerClass,
+      playerGold: this.playerGold,
+      playerKills: this.playerKills,
+      inventorySnapshot: this.inventory.getItemIds(),
+      equipmentSnapshot: this.inventory.getEquippedIds(),
+      playerHp: this.playerSoul.vitals.hp,
+      playerHpMax: this.playerSoul.vitals.hpMax,
+      playerMana: this.playerSoul.vitals.mana,
+      playerManaMax: this.playerSoul.vitals.manaMax,
+      bossesDefeated: this.zoneManager.getDefeatedBosses(),
+    });
   }
 
   // ── Utility ─────────────────────────────────────────────
@@ -1257,6 +1748,12 @@ export class GameEngine {
     this.bulletSystem.clear();
     this.lootSystem.clear();
     this.lootSystem.inventory = [];
+    this.bossSystem.clear();
+    this.zoneManager.reset();
+    this.checkpointManager.reset();
+    CheckpointManager.clearSave();
+    this.inventory = new InventoryOverlay();
+    this.inventory.audio = this.audio;
     this.playerWeapon.ammo = this.playerWeapon.weapon.magSize;
     this.playerWeapon.cooldown = 0;
     this.playerWeapon.reloading = 0;
@@ -1266,6 +1763,7 @@ export class GameEngine {
     this.playerKills = 0;
     this.playerGold = 0;
     this.musicStarted = false;
+    this.matchWon = false;
     this.footstepTimer = 0;
     this.lastPlayerHp = 0;
 

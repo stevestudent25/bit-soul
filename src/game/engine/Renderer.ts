@@ -11,7 +11,10 @@ import type { Particle } from './ParticleSystem';
 import type { Bullet } from './BulletSystem';
 import type { WeaponState } from './BulletSystem';
 import type { LootDrop } from './LootSystem';
-import { RARITY_COLORS, RARITY_GLOW } from '../data/ItemDatabase';
+import { ITEMS, RARITY_COLORS, RARITY_GLOW } from '../data/ItemDatabase';
+import { getItemColors, getGoldTierColors, getTintOverlay } from '../data/ItemColorSystem';
+import type { ActiveCheckpoint } from './CheckpointManager';
+import { CHECKPOINT_ACTIVE_TINTS, CHECKPOINT_GLOW_COLORS, CHECKPOINT_SYMBOLS } from '../data/CheckpointData';
 
 // ── Biome color fallbacks ──
 const BIOME_COLORS: Record<Biome, string> = {
@@ -225,7 +228,7 @@ export class Renderer {
     }
   }
 
-  // ── Loot Drop Rendering ─────────────────────────────────
+  // ── Loot Drop Rendering (with ItemColorSystem tinting) ──
   renderLootDrops(drops: LootDrop[], camera: Camera, frameCount: number, textures?: TextureManager): void {
     for (const drop of drops) {
       if (drop.collected) continue;
@@ -235,14 +238,33 @@ export class Renderer {
       // Bob animation
       const bob = Math.sin((frameCount * 0.06) + drop.bobOffset) * 3;
 
-      // Rarity glow
-      const glowSize = RARITY_GLOW[drop.rarity];
+      // Get item-specific colors
+      const def = ITEMS[drop.itemId];
+      const isCurrency = def?.category === 'currency';
+      const goldAmount = isCurrency ? (def?.effects?.goldValue || 1) * drop.count : 0;
+      const goldTier = isCurrency ? getGoldTierColors(goldAmount) : null;
+
+      // Determine glow color — gold uses tier color, items use rarity + item color
+      let glowColor: string;
+      let glowSize: number;
+      if (goldTier) {
+        glowColor = goldTier.glow;
+        glowSize = goldTier.glowRadius;
+      } else if (def) {
+        const itemColors = getItemColors(def);
+        glowColor = itemColors.glowColor;
+        glowSize = RARITY_GLOW[drop.rarity];
+      } else {
+        glowColor = RARITY_COLORS[drop.rarity];
+        glowSize = RARITY_GLOW[drop.rarity];
+      }
+
+      // Glow circle
       if (glowSize > 0) {
-        const color = RARITY_COLORS[drop.rarity];
         this.ctx.save();
-        this.ctx.shadowColor = color;
+        this.ctx.shadowColor = glowColor;
         this.ctx.shadowBlur = glowSize;
-        this.ctx.fillStyle = color;
+        this.ctx.fillStyle = glowColor;
         this.ctx.globalAlpha = 0.25 + Math.sin(frameCount * 0.04) * 0.1;
         this.ctx.beginPath();
         this.ctx.arc(screen.x, screen.y + bob - size * 0.2, size * 0.6, 0, Math.PI * 2);
@@ -250,21 +272,41 @@ export class Renderer {
         this.ctx.restore();
       }
 
-      // Draw sprite or fallback
+      // Draw sprite with item-specific color tint overlay
       const spriteImg = textures?.getLootSprite(drop.sprite);
       if (spriteImg && spriteImg.complete && spriteImg.naturalWidth > 0) {
         this.ctx.save();
         this.ctx.imageSmoothingEnabled = false;
         this.ctx.drawImage(spriteImg, screen.x - size * 0.5, screen.y + bob - size, size, size);
+
+        // Apply color tint overlay
+        const tintColor = goldTier ? goldTier.tint : (def ? getItemColors(def).spriteTint : null);
+        if (tintColor) {
+          this.ctx.globalCompositeOperation = 'source-atop';
+          this.ctx.fillStyle = getTintOverlay(tintColor, 0.35);
+          this.ctx.fillRect(screen.x - size * 0.5, screen.y + bob - size, size, size);
+        }
         this.ctx.restore();
       } else {
-        // Fallback: colored diamond
-        const color = RARITY_COLORS[drop.rarity];
+        // Fallback: colored diamond using item color
+        const tintColor = goldTier ? goldTier.tint : (def ? getItemColors(def).spriteTint : RARITY_COLORS[drop.rarity]);
         this.ctx.save();
-        this.ctx.fillStyle = color;
+        this.ctx.fillStyle = tintColor;
         this.ctx.translate(screen.x, screen.y + bob - size * 0.4);
         this.ctx.rotate(Math.PI / 4);
         this.ctx.fillRect(-size * 0.2, -size * 0.2, size * 0.4, size * 0.4);
+        this.ctx.restore();
+      }
+
+      // Legendary/Epic sparkle effect
+      if (drop.rarity === 'legendary' || drop.rarity === 'epic') {
+        const sparkleAlpha = 0.4 + Math.sin(frameCount * 0.08 + drop.bobOffset) * 0.3;
+        this.ctx.save();
+        this.ctx.globalAlpha = sparkleAlpha;
+        this.ctx.fillStyle = glowColor;
+        const sparkleSize = 2;
+        const sparkleOffset = Math.sin(frameCount * 0.05 + drop.bobOffset * 2) * size * 0.4;
+        this.ctx.fillRect(screen.x + sparkleOffset - sparkleSize / 2, screen.y + bob - size * 0.6, sparkleSize, sparkleSize);
         this.ctx.restore();
       }
     }
@@ -348,7 +390,11 @@ export class Renderer {
       this.ctx.fill();
 
       // Try to draw sprite image
-      const spriteName = soul.sprite ? `${soul.sprite}_stand` : null;
+      // Gun raise animation: use _gun pose when soul is actively shooting
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const shootFrames = (soul as any).shootingFrames as number | undefined;
+      const pose = (shootFrames && shootFrames > 0) ? '_gun' : '_stand';
+      const spriteName = soul.sprite ? `${soul.sprite}${pose}` : null;
       const spriteImg = spriteName && textures ? textures.getCharacterSprite(spriteName) : null;
 
       if (spriteImg && spriteImg.complete && spriteImg.naturalWidth > 0) {
@@ -482,6 +528,170 @@ export class Renderer {
       this.ctx.fill();
       this.ctx.restore();
     }
+  }
+
+  // ── Checkpoint Rendering ─────────────────────────────────
+  renderCheckpoints(checkpoints: ActiveCheckpoint[], camera: Camera, frameCount: number): void {
+    for (const cp of checkpoints) {
+      if (!cp.revealed) continue;
+
+      const screen = camera.worldToScreen(cp.worldPos.x, cp.worldPos.y);
+      const size = Math.ceil(this.tileSize * camera.zoom);
+      const cx = screen.x + size * 0.5;
+      const cy = screen.y + size * 0.5;
+
+      // Skip off-screen
+      if (cx + size * 2 < 0 || cy + size * 2 < 0 || cx - size * 2 > this.width || cy - size * 2 > this.height) continue;
+
+      const isActive = cp.activated;
+      const type = cp.def.type;
+      const tint = CHECKPOINT_ACTIVE_TINTS[type];
+      const glow = CHECKPOINT_GLOW_COLORS[type];
+      const symbol = CHECKPOINT_SYMBOLS[type];
+
+      // Bob animation
+      const bob = Math.sin(cp.animPhase) * 2;
+
+      // Hidden checkpoint fade-in (partially transparent until close)
+      const baseAlpha = cp.def.isHidden && !isActive ? 0.5 : 1.0;
+
+      this.ctx.save();
+      this.ctx.globalAlpha = baseAlpha;
+
+      // Glow circle (larger for active)
+      const glowRadius = isActive ? size * 0.8 : size * 0.5;
+      const glowAlpha = isActive
+        ? 0.25 + Math.sin(frameCount * 0.04) * 0.1
+        : 0.1 + Math.sin(frameCount * 0.03) * 0.05;
+      this.ctx.save();
+      this.ctx.shadowColor = glow;
+      this.ctx.shadowBlur = isActive ? 20 : 8;
+      this.ctx.fillStyle = glow;
+      this.ctx.globalAlpha = glowAlpha * baseAlpha;
+      this.ctx.beginPath();
+      this.ctx.arc(cx, cy + bob, glowRadius, 0, Math.PI * 2);
+      this.ctx.fill();
+      this.ctx.restore();
+
+      // Base pedestal
+      this.ctx.fillStyle = isActive ? '#555566' : '#333344';
+      this.ctx.fillRect(cx - size * 0.3, cy + size * 0.2 + bob, size * 0.6, size * 0.15);
+
+      // Checkpoint symbol — colored and glowing for active, dim for inactive
+      this.ctx.save();
+      this.ctx.globalAlpha = baseAlpha;
+      this.ctx.fillStyle = isActive ? tint : '#666677';
+      if (isActive) {
+        this.ctx.shadowColor = tint;
+        this.ctx.shadowBlur = 12;
+      }
+      this.ctx.font = `${Math.floor(size * 0.65)}px monospace`;
+      this.ctx.textAlign = 'center';
+      this.ctx.fillText(symbol, cx, cy + bob + size * 0.1);
+      this.ctx.restore();
+
+      // Active checkpoint: rotating ring
+      if (isActive) {
+        const ringAngle = frameCount * 0.02;
+        this.ctx.save();
+        this.ctx.strokeStyle = tint;
+        this.ctx.lineWidth = 1.5;
+        this.ctx.globalAlpha = 0.5 * baseAlpha;
+        this.ctx.setLineDash([4, 6]);
+        this.ctx.beginPath();
+        this.ctx.arc(cx, cy + bob, size * 0.55, ringAngle, ringAngle + Math.PI * 1.5);
+        this.ctx.stroke();
+        this.ctx.setLineDash([]);
+        this.ctx.restore();
+      }
+
+      // Name label (only when active or nearby — just always show for simplicity)
+      if (isActive) {
+        this.ctx.save();
+        this.ctx.globalAlpha = 0.8 * baseAlpha;
+        this.ctx.fillStyle = tint;
+        this.ctx.font = `bold ${Math.max(9, Math.floor(size * 0.28))}px monospace`;
+        this.ctx.textAlign = 'center';
+        this.ctx.shadowColor = '#000';
+        this.ctx.shadowBlur = 3;
+        this.ctx.fillText(cp.def.name, cx, cy - size * 0.45 + bob);
+        this.ctx.restore();
+      }
+
+      // Pre-boss indicator
+      if (cp.def.isPreBoss) {
+        this.ctx.save();
+        this.ctx.globalAlpha = 0.6 * baseAlpha;
+        this.ctx.fillStyle = '#ff4444';
+        this.ctx.font = `${Math.max(8, Math.floor(size * 0.22))}px monospace`;
+        this.ctx.textAlign = 'center';
+        this.ctx.fillText('☠ BOSS AHEAD', cx, cy + size * 0.5 + bob);
+        this.ctx.restore();
+      }
+
+      this.ctx.restore();
+    }
+  }
+
+  // ── Checkpoint Save Indicator (HUD overlay) ─────────────
+  renderSaveIndicator(indicator: { text: string; alpha: number } | null): void {
+    if (!indicator) return;
+    this.ctx.save();
+    this.ctx.globalAlpha = indicator.alpha;
+    this.ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+    const textW = this.ctx.measureText(indicator.text).width + 30;
+    const ix = this.width / 2 - textW / 2;
+    const iy = this.height - 180;
+    this.ctx.fillRect(ix, iy, textW, 28);
+    this.ctx.strokeStyle = '#44DDFF';
+    this.ctx.lineWidth = 1;
+    this.ctx.strokeRect(ix, iy, textW, 28);
+    this.ctx.fillStyle = '#44DDFF';
+    this.ctx.font = 'bold 13px monospace';
+    this.ctx.textAlign = 'center';
+    this.ctx.fillText(indicator.text, this.width / 2, iy + 19);
+    this.ctx.textAlign = 'left';
+    this.ctx.restore();
+  }
+
+  // ── Checkpoint Activation Flash Effect ──────────────────
+  renderCheckpointFlash(flash: { pos: { x: number; y: number }; progress: number; color: string } | null, camera: Camera): void {
+    if (!flash) return;
+    const screen = camera.worldToScreen(flash.pos.x, flash.pos.y);
+    const size = this.tileSize * camera.zoom;
+    const cx = screen.x + size * 0.5;
+    const cy = screen.y + size * 0.5;
+    const radius = flash.progress * size * 3;
+    const alpha = 1 - flash.progress;
+
+    this.ctx.save();
+    this.ctx.globalAlpha = alpha * 0.4;
+    this.ctx.strokeStyle = flash.color;
+    this.ctx.lineWidth = 3 * (1 - flash.progress);
+    this.ctx.beginPath();
+    this.ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    this.ctx.stroke();
+    this.ctx.restore();
+  }
+
+  // ── Invincibility Shimmer (after respawn) ───────────────
+  renderInvincibleOverlay(playerPos: { x: number; y: number }, camera: Camera, frameCount: number): void {
+    const screen = camera.worldToScreen(playerPos.x, playerPos.y);
+    const size = this.tileSize * camera.zoom;
+    const cx = screen.x + size * 0.5;
+    const cy = screen.y + size * 0.5;
+    const alpha = 0.15 + Math.sin(frameCount * 0.15) * 0.1;
+
+    this.ctx.save();
+    this.ctx.globalAlpha = alpha;
+    this.ctx.strokeStyle = '#44DDFF';
+    this.ctx.lineWidth = 2;
+    this.ctx.shadowColor = '#44DDFF';
+    this.ctx.shadowBlur = 10;
+    this.ctx.beginPath();
+    this.ctx.arc(cx, cy, size * 0.55, 0, Math.PI * 2);
+    this.ctx.stroke();
+    this.ctx.restore();
   }
 
   // ── Minimap ─────────────────────────────────────────────

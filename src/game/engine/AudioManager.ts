@@ -33,7 +33,7 @@ const SOUND_MANIFEST: Record<string, string> = {
 
   // ── SFX — Weapons ──
   laser_fire:        'sfx/driken5482-retro-laser-1-236669.mp3',
-  pistol_reload:     'sfx/epic_stock_media-game_weapons_designed_pistol_revolver_recharge_ammo_2-47135.mp3',
+  pistol_reload:     'sfx/epic_stock_media-game_weapons_designed_pistol_revolver_recharge_ammo_2_single_mechanical_magazine_reload_bullet-386255.mp3',
   fireball:          'sfx/freesound_community-8-bit-fireball-81148.mp3',
   missile_fire:      'sfx/freesound_community-missile-firing-fl-106655.mp3',
   bio_gun:           'sfx/u_7atk93mmrk-video-game-bio-gun-sfx-203965.mp3',

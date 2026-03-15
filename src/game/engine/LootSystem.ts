@@ -3,7 +3,8 @@
 // ═══════════════════════════════════════════════════════════════
 
 import type { Vector2 } from '../types/SoulEntity';
-import { ITEMS, RARITY_COLORS, type ItemRarity } from '../data/ItemDatabase';
+import { ITEMS, type ItemRarity } from '../data/ItemDatabase';
+import { getGoldTierColors, getRarityTextColor } from '../data/ItemColorSystem';
 
 export interface LootDrop {
   id: number;
@@ -92,7 +93,8 @@ export class LootSystem {
         if (def.category === 'currency') {
           const gold = (def.effects?.goldValue || 1) * drop.count;
           goldGained += gold;
-          this.addPickupText(`+${gold}g`, '#FFD700', drop.position);
+          const goldTier = getGoldTierColors(gold);
+          this.addPickupText(`+${gold}g`, goldTier.textColor, drop.position);
         } else if (def.category === 'ammo') {
           ammoGained += drop.count;
           this.addPickupText(`+Ammo`, '#88ff88', drop.position);
@@ -100,7 +102,7 @@ export class LootSystem {
           // Add to inventory
           if (this.addToInventory(drop.itemId, drop.count)) {
             itemsPickedUp.push(drop.itemId);
-            const color = RARITY_COLORS[def.rarity];
+            const color = getRarityTextColor(def.rarity);
             this.addPickupText(`+${def.name}`, color, drop.position);
           } else {
             // Inventory full — don't pick up

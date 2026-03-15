@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { GameEngine } from '../game/engine/GameEngine';
 import { SoulClass } from '../game/types/SoulEntity';
+import { CheckpointManager } from '../game/engine/CheckpointManager';
 
 const CLASS_INFO: Record<SoulClass, {
   desc: string;
@@ -78,9 +79,12 @@ export default function BitSoulGame() {
   const engineRef = useRef<GameEngine | null>(null);
   const [selectedClass, setSelectedClass] = useState<SoulClass>(SoulClass.Soldier);
   const [started, setStarted] = useState(false);
+  const [continuing, setContinuing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
   const [poseIndex, setPoseIndex] = useState(0);
+
+  const hasSave = CheckpointManager.hasSave();
 
   useEffect(() => { setMounted(true); }, []);
 
@@ -112,6 +116,9 @@ export default function BitSoulGame() {
 
     engine.init(canvas)
       .then(() => {
+        if (continuing) {
+          engine.loadFromSave();
+        }
         window.addEventListener('resize', resizeCanvas);
         engine.state = 'playing';
         engine.start();
@@ -274,13 +281,34 @@ export default function BitSoulGame() {
               <div><span className="text-gray-400 font-bold">ESC</span> Pause</div>
               <div><span className="text-gray-400 font-bold">Explore</span> Dungeons</div>
             </div>
-            <button onClick={() => setStarted(true)}
-              className="px-8 py-4 text-base font-black rounded-xl cursor-pointer text-white tracking-widest shrink-0 relative overflow-hidden"
-              style={{ backgroundColor: '#8844ff', boxShadow: '0 0 25px rgba(136,68,255,0.4), 0 4px 15px rgba(0,0,0,0.3)', transition: 'all 0.3s ease' }}
-              onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.06)'; e.currentTarget.style.boxShadow = '0 0 40px rgba(136,68,255,0.6)'; }}
-              onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = '0 0 25px rgba(136,68,255,0.4)'; }}>
-              ENTER THE DUNGEON
-            </button>
+            <div className="flex flex-col gap-2 shrink-0">
+              <button onClick={() => setStarted(true)}
+                className="px-8 py-4 text-base font-black rounded-xl cursor-pointer text-white tracking-widest relative overflow-hidden"
+                style={{ backgroundColor: '#8844ff', boxShadow: '0 0 25px rgba(136,68,255,0.4), 0 4px 15px rgba(0,0,0,0.3)', transition: 'all 0.3s ease' }}
+                onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.06)'; e.currentTarget.style.boxShadow = '0 0 40px rgba(136,68,255,0.6)'; }}
+                onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = '0 0 25px rgba(136,68,255,0.4)'; }}>
+                ENTER THE DUNGEON
+              </button>
+              {hasSave && (
+                <button onClick={() => {
+                  const save = CheckpointManager.loadSave();
+                  if (save?.playerClass) {
+                    const cls = save.playerClass as SoulClass;
+                    if (Object.values(SoulClass).includes(cls)) {
+                      setSelectedClass(cls);
+                    }
+                  }
+                  setContinuing(true);
+                  setStarted(true);
+                }}
+                  className="px-8 py-3 text-sm font-bold rounded-xl cursor-pointer text-gray-300 tracking-widest relative overflow-hidden"
+                  style={{ backgroundColor: '#1a1a2e', border: '1px solid rgba(136,68,255,0.3)', boxShadow: '0 0 15px rgba(136,68,255,0.15)', transition: 'all 0.3s ease' }}
+                  onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.04)'; e.currentTarget.style.borderColor = 'rgba(136,68,255,0.6)'; }}
+                  onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.borderColor = 'rgba(136,68,255,0.3)'; }}>
+                  CONTINUE
+                </button>
+              )}
+            </div>
           </div>
         </div>
 

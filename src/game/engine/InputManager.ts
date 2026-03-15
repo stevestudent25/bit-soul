@@ -6,7 +6,8 @@ export type InputAction =
   | 'move_up' | 'move_down' | 'move_left' | 'move_right'
   | 'dash' | 'attack' | 'sprint'
   | 'ability_1' | 'ability_2' | 'ability_3' | 'ability_4'
-  | 'pause' | 'minimap';
+  | 'pause' | 'minimap'
+  | 'inventory' | 'quick_1' | 'quick_2' | 'quick_3' | 'quick_4';
 
 const KEY_BINDINGS: Record<string, InputAction> = {
   'KeyW': 'move_up',
@@ -26,6 +27,12 @@ const KEY_BINDINGS: Record<string, InputAction> = {
   'KeyF': 'ability_4',
   'Escape': 'pause',
   'KeyM': 'minimap',
+  'Tab': 'inventory',
+  'KeyI': 'inventory',
+  'Digit1': 'quick_1',
+  'Digit2': 'quick_2',
+  'Digit3': 'quick_3',
+  'Digit4': 'quick_4',
 };
 
 export class InputManager {
