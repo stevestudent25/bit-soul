@@ -94,7 +94,7 @@ export class Renderer {
   private renderGroundTile(sx: number, sy: number, size: number, tile: Tile, textures: TextureManager): void {
     const texName = textures.getBiomeTexture(tile.biome);
     const variant = (tile.x * 7 + tile.y * 13) % 4;
-    const tileCanvas = textures.getTile(texName, this.tileSize, variant);
+    const tileCanvas = textures.getTile(texName, this.tileSize, variant, tile.biome);
 
     if (size === this.tileSize) {
       this.ctx.drawImage(tileCanvas, sx, sy);
@@ -102,18 +102,18 @@ export class Renderer {
       this.ctx.drawImage(tileCanvas, 0, 0, this.tileSize, this.tileSize, sx, sy, size, size);
     }
 
-    // Biome tint overlay
-    this.ctx.fillStyle = BIOME_COLORS[tile.biome] + '30';
+    // Subtle biome tint overlay
+    this.ctx.fillStyle = BIOME_COLORS[tile.biome] + '18';
     this.ctx.fillRect(sx, sy, size, size);
   }
 
   private renderWallTile(sx: number, sy: number, size: number, tile: Tile, textures: TextureManager): void {
     const wallMat = tile.properties.material;
-    const tileCanvas = textures.getWallTile(this.tileSize, (tile.x + tile.y) % 4, wallMat);
+    const tileCanvas = textures.getWallTile(this.tileSize, (tile.x + tile.y) % 4, wallMat, tile.biome);
     this.ctx.drawImage(tileCanvas, 0, 0, this.tileSize, this.tileSize, sx, sy, size, size);
 
-    // Biome tint overlay (match ground tint)
-    this.ctx.fillStyle = BIOME_COLORS[tile.biome] + '40';
+    // Biome tint overlay (slightly stronger for walls)
+    this.ctx.fillStyle = BIOME_COLORS[tile.biome] + '28';
     this.ctx.fillRect(sx, sy, size, size);
 
     // 3D edge shadow

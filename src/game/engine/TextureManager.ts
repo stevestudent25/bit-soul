@@ -1,11 +1,63 @@
 // ═══════════════════════════════════════════════════════════════
-// BIT-SOUL — Texture Manager (Dungeon Tiles + Character Sprites)
+// BIT-SOUL — Texture Manager (Named Tiles + Character Sprites)
 // ═══════════════════════════════════════════════════════════════
 
 import { Biome, TileMaterial } from '../types/World';
 
-// ── Dungeon tile indices (Tiny Dungeon 16×16 tileset) ──────
-// Mapping material types to tile_XXXX.png indices
+// ── Named biome ground tiles (Platformer Assets Base) ──────
+// Each biome gets ground tile variants for visual variety
+const BIOME_GROUND_TILES: Record<Biome, string[]> = {
+  [Biome.ShatteredPlains]: ['grassMid', 'grassCenter', 'grassCenter_rounded', 'grassHalf'],
+  [Biome.ArcaneForest]:    ['dirtMid', 'dirtCenter', 'dirtCenter_rounded', 'dirtHalf'],
+  [Biome.CrystalCaverns]:  ['stoneMid', 'stoneCenter', 'stoneCenter_rounded', 'stoneHalf'],
+  [Biome.VoidMarsh]:       ['dirtMid', 'dirtCenter', 'dirtCenter_rounded', 'dirtHalf'],
+  [Biome.NeonRuins]:       ['stoneMid', 'stoneCenter', 'stoneCenter_rounded', 'stoneHalf'],
+  [Biome.EmberFields]:     ['sandMid', 'sandCenter', 'sandCenter_rounded', 'sandHalf'],
+  [Biome.FrozenAether]:    ['snowMid', 'snowCenter', 'snowCenter_rounded', 'snowHalf'],
+};
+
+// Each biome gets wall tile variants
+const BIOME_WALL_TILES: Record<Biome, string[]> = {
+  [Biome.ShatteredPlains]: ['dirt', 'dirtHalf', 'dirtLeft', 'dirtRight'],
+  [Biome.ArcaneForest]:    ['grass', 'grassHalf', 'grassLeft', 'grassRight'],
+  [Biome.CrystalCaverns]:  ['stone', 'stoneHalf', 'stoneLeft', 'stoneRight'],
+  [Biome.VoidMarsh]:       ['stone', 'stoneHalf', 'stoneLeft', 'stoneRight'],
+  [Biome.NeonRuins]:       ['castle', 'castleHalf', 'castleLeft', 'castleRight'],
+  [Biome.EmberFields]:     ['sand', 'sandHalf', 'sandLeft', 'sandRight'],
+  [Biome.FrozenAether]:    ['snow', 'snowHalf', 'snowLeft', 'snowRight'],
+};
+
+// Named tiles to load from assets/tiles/named/
+const NAMED_TILES = [
+  // Grass terrain
+  'grassMid', 'grassCenter', 'grassCenter_rounded', 'grassLeft', 'grassRight', 'grassHalf', 'grass',
+  // Dirt terrain
+  'dirtMid', 'dirtCenter', 'dirtCenter_rounded', 'dirtLeft', 'dirtRight', 'dirtHalf', 'dirt',
+  // Sand terrain
+  'sandMid', 'sandCenter', 'sandCenter_rounded', 'sandLeft', 'sandRight', 'sandHalf', 'sand',
+  // Stone terrain
+  'stoneMid', 'stoneCenter', 'stoneCenter_rounded', 'stoneLeft', 'stoneRight', 'stoneHalf', 'stone',
+  // Castle terrain
+  'castleMid', 'castleCenter', 'castleCenter_rounded', 'castleLeft', 'castleRight', 'castleHalf', 'castle',
+  // Snow terrain
+  'snowMid', 'snowCenter', 'snowCenter_rounded', 'snowLeft', 'snowRight', 'snowHalf', 'snow',
+  // Liquids
+  'liquidLava', 'liquidLavaTop', 'liquidLavaTop_mid',
+  'liquidWater', 'liquidWaterTop', 'liquidWaterTop_mid',
+  // Walls
+  'brickWall', 'stoneWall',
+  // Props
+  'bridge', 'bridgeLogs', 'fence', 'fenceBroken',
+  'tochLit', 'tochLit2', 'torch',
+  // Environment (from Background Elements Redux)
+  'pyramid', 'pyramidMayan', 'tree', 'treeDead', 'treeFrozen',
+  'treePine', 'treePineFrozen', 'treePalm', 'treePineOrange', 'treePineSnow',
+  'cactus1', 'cactus2', 'cactus3',
+  'bush1', 'bush2', 'bush3', 'bush4',
+  'castleWall', 'castleWallAlt', 'tower', 'towerAlt',
+];
+
+// ── Legacy dungeon tile indices (fallback) ──────
 const MATERIAL_TILES: Record<TileMaterial, number[]> = {
   [TileMaterial.Stone]: [0, 1, 2, 3],
   [TileMaterial.Wood]:  [16, 17, 18, 19],
@@ -19,7 +71,6 @@ const MATERIAL_TILES: Record<TileMaterial, number[]> = {
   [TileMaterial.Sand]:  [8, 9, 10, 11],
 };
 
-// Wall tile indices per material (biome-matched darker variants)
 const MATERIAL_WALL_TILES: Record<TileMaterial, number[]> = {
   [TileMaterial.Stone]: [20, 21, 22, 23],
   [TileMaterial.Wood]:  [24, 25, 26, 27],
@@ -70,7 +121,12 @@ export class TextureManager {
   async loadAll(): Promise<void> {
     const promises: Promise<void>[] = [];
 
-    // Load dungeon tiles (tile_0000 through tile_0131)
+    // Load named tiles (Platformer Assets Base + Background Elements Redux)
+    for (const tile of NAMED_TILES) {
+      promises.push(this.loadImage(`named_${tile}`, `assets/tiles/named/${tile}.png`));
+    }
+
+    // Load dungeon tiles as fallback (tile_0000 through tile_0131)
     for (let i = 0; i < 132; i++) {
       const name = `tile_${i.toString().padStart(4, '0')}`;
       promises.push(this.loadImage(name, `assets/tiles/dungeon/${name}.png`));
@@ -154,17 +210,32 @@ export class TextureManager {
     return this.images.get(name) || null;
   }
 
-  /** Get a tile-sized canvas for a material type */
-  getTile(material: TileMaterial | string, tileSize: number, variant: number = 0): HTMLCanvasElement {
-    const key = `${material}_${tileSize}_${variant}`;
+  /** Get a tile-sized canvas for a material type (prefers named tiles) */
+  getTile(material: TileMaterial | string, tileSize: number, variant: number = 0, biome?: Biome): HTMLCanvasElement {
+    const key = biome ? `named_${biome}_${tileSize}_${variant}` : `${material}_${tileSize}_${variant}`;
     if (this.tileCache.has(key)) return this.tileCache.get(key)!;
 
     const canvas = document.createElement('canvas');
     canvas.width = tileSize;
     canvas.height = tileSize;
     const ctx = canvas.getContext('2d')!;
+    ctx.imageSmoothingEnabled = false;
 
-    // Try to find the tile image
+    // Try named tile from biome mapping first
+    if (biome) {
+      const tiles = BIOME_GROUND_TILES[biome];
+      if (tiles) {
+        const tileName = tiles[variant % tiles.length];
+        const img = this.images.get(`named_${tileName}`);
+        if (img && img.complete && img.naturalWidth > 0) {
+          ctx.drawImage(img, 0, 0, tileSize, tileSize);
+          this.tileCache.set(key, canvas);
+          return canvas;
+        }
+      }
+    }
+
+    // Fallback: numbered dungeon tiles
     const mat = material as TileMaterial;
     const indices = MATERIAL_TILES[mat];
     if (indices) {
@@ -172,14 +243,13 @@ export class TextureManager {
       const tileName = `tile_${idx.toString().padStart(4, '0')}`;
       const img = this.images.get(tileName);
       if (img && img.complete && img.naturalWidth > 0) {
-        ctx.imageSmoothingEnabled = false;
         ctx.drawImage(img, 0, 0, tileSize, tileSize);
         this.tileCache.set(key, canvas);
         return canvas;
       }
     }
 
-    // Fallback: solid color with noise
+    // Final fallback: solid color with noise
     ctx.fillStyle = this.getFallbackColor(material);
     ctx.fillRect(0, 0, tileSize, tileSize);
     for (let i = 0; i < 12; i++) {
@@ -196,18 +266,36 @@ export class TextureManager {
     return canvas;
   }
 
-  /** Get a wall tile canvas (biome-aware) */
-  getWallTile(tileSize: number, variant: number = 0, material?: TileMaterial): HTMLCanvasElement {
+  /** Get a wall tile canvas (biome-aware, prefers named tiles) */
+  getWallTile(tileSize: number, variant: number = 0, material?: TileMaterial, biome?: Biome): HTMLCanvasElement {
     const mat = material ?? TileMaterial.Stone;
-    const key = `wall_${mat}_${tileSize}_${variant}`;
+    const key = biome ? `wall_named_${biome}_${tileSize}_${variant}` : `wall_${mat}_${tileSize}_${variant}`;
     if (this.tileCache.has(key)) return this.tileCache.get(key)!;
 
     const canvas = document.createElement('canvas');
     canvas.width = tileSize;
     canvas.height = tileSize;
     const ctx = canvas.getContext('2d')!;
+    ctx.imageSmoothingEnabled = false;
 
-    // Try material-specific wall tiles first, fall back to using floor tiles darkened
+    // Try named wall tile from biome mapping first
+    if (biome) {
+      const tiles = BIOME_WALL_TILES[biome];
+      if (tiles) {
+        const tileName = tiles[variant % tiles.length];
+        const img = this.images.get(`named_${tileName}`);
+        if (img && img.complete && img.naturalWidth > 0) {
+          ctx.drawImage(img, 0, 0, tileSize, tileSize);
+          // Darken wall tiles to distinguish from floor
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+          ctx.fillRect(0, 0, tileSize, tileSize);
+          this.tileCache.set(key, canvas);
+          return canvas;
+        }
+      }
+    }
+
+    // Fallback: numbered wall/floor tiles
     const wallIndices = MATERIAL_WALL_TILES[mat];
     const floorIndices = MATERIAL_TILES[mat];
     const indices = wallIndices || floorIndices;
@@ -270,6 +358,11 @@ export class TextureManager {
   /** Get a prop sprite image (barrel, chest, crate, etc.) */
   getPropSprite(name: string): HTMLImageElement | null {
     return this.images.get(`prop_${name}`) || null;
+  }
+
+  /** Get a named tile image directly (liquidLava, tree, etc.) */
+  getNamedTile(name: string): HTMLImageElement | null {
+    return this.images.get(`named_${name}`) || null;
   }
 
   /** Get a loot item sprite by its asset path */
