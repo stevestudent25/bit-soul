@@ -822,42 +822,43 @@ export class Renderer {
     }
 
     // Dungeon stats display (top center)
-    this.ctx.font = 'bold 16px monospace';
+    this.ctx.font = 'bold 24px monospace';
     this.ctx.textAlign = 'center';
     const cx = this.width / 2;
     this.ctx.fillStyle = '#a855f7';
-    this.ctx.fillText(`${dungeonStats.zoneName ?? ''} — Floor ${dungeonStats.floor}`, cx, 20);
-    this.ctx.font = '13px monospace';
+    this.ctx.fillText(`${dungeonStats.zoneName ?? ''} — Floor ${dungeonStats.floor}`, cx, 28);
+    this.ctx.font = 'bold 18px monospace';
     this.ctx.fillStyle = '#44ff44';
-    this.ctx.fillText(`⚔ ${dungeonStats.kills}`, cx - 80, 20);
+    this.ctx.fillText(`⚔ ${dungeonStats.kills}`, cx - 120, 28);
     this.ctx.fillStyle = '#f59e0b';
-    this.ctx.fillText(`💰 ${dungeonStats.gold}`, cx + 80, 20);
+    this.ctx.fillText(`💰 ${dungeonStats.gold}`, cx + 120, 28);
     if (dungeonStats.items !== undefined && dungeonStats.items > 0) {
       this.ctx.fillStyle = '#44ccff';
-      this.ctx.fillText(`📦 ${dungeonStats.items}`, cx + 160, 20);
+      this.ctx.fillText(`📦 ${dungeonStats.items}`, cx + 220, 28);
     }
+    this.ctx.font = 'bold 20px monospace';
     this.ctx.fillStyle = '#ff6644';
-    this.ctx.fillText(`Enemies: ${dungeonStats.enemiesLeft}`, cx, 38);
+    this.ctx.fillText(`Enemies: ${dungeonStats.enemiesLeft}`, cx, 54);
 
     // Timer and phase
     const minutes = Math.floor(matchTime / 3600);
     const seconds = Math.floor((matchTime % 3600) / 60);
-    this.ctx.fillStyle = '#888';
-    this.ctx.font = '12px monospace';
-    this.ctx.fillText(`${minutes}:${seconds.toString().padStart(2, '0')} — ${phase}`, cx, 54);
+    this.ctx.fillStyle = '#aaa';
+    this.ctx.font = '16px monospace';
+    this.ctx.fillText(`${minutes}:${seconds.toString().padStart(2, '0')} — ${phase}`, cx, 74);
 
     // Kill feed (top right)
     const now = Date.now();
     this.ctx.textAlign = 'right';
-    this.ctx.font = '11px monospace';
-    let kfY = 60;
+    this.ctx.font = '14px monospace';
+    let kfY = 80;
     for (const entry of killFeed.slice(-6)) {
       const age = now - entry.time;
       if (age > 8000) continue;
       this.ctx.globalAlpha = Math.max(0, 1 - age / 8000);
       this.ctx.fillStyle = entry.color;
       this.ctx.fillText(entry.text, this.width - 10, kfY);
-      kfY += 15;
+      kfY += 18;
     }
     this.ctx.globalAlpha = 1;
     this.ctx.textAlign = 'left';
