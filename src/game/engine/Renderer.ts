@@ -411,9 +411,9 @@ export class Renderer {
         // Flip sprite based on facing direction + progressive tilt for up/down
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const vTilt = (soul as any).verticalTilt as number || 0;
-        // Interpolate: subtle tilt (inverted) → full 90° rotation
+        // Interpolate: inverted initial tilt → full 90° rotation
         const maxAngle = Math.PI / 2; // 90 degrees
-        const tiltAngle = soul.facing.y * (-0.18 + vTilt * (maxAngle + 0.18));
+        const tiltAngle = soul.facing.y * (-0.18 + vTilt * (maxAngle - 0.18));
         if (soul.facing.x < 0) {
           this.ctx.translate(cx, cy - size * 0.15);
           this.ctx.scale(-1, 1);
