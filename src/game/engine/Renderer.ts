@@ -408,13 +408,17 @@ export class Renderer {
           this.ctx.shadowBlur = 15;
         }
 
-        // Flip sprite based on facing direction
+        // Flip sprite based on facing direction + tilt for up/down movement
+        const tiltAngle = soul.facing.y * 0.18; // subtle tilt toward vertical facing
         if (soul.facing.x < 0) {
           this.ctx.translate(cx, cy - size * 0.15);
           this.ctx.scale(-1, 1);
+          if (tiltAngle !== 0) this.ctx.rotate(-tiltAngle);
           this.ctx.drawImage(spriteImg, -size * 0.5, -size * 0.45, size, size);
         } else {
-          this.ctx.drawImage(spriteImg, cx - size * 0.5, cy - size * 0.6, size, size);
+          this.ctx.translate(cx, cy - size * 0.15);
+          if (tiltAngle !== 0) this.ctx.rotate(tiltAngle);
+          this.ctx.drawImage(spriteImg, -size * 0.5, -size * 0.45, size, size);
         }
 
         this.ctx.restore();
