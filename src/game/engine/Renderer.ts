@@ -425,7 +425,7 @@ export class Renderer {
         if (soul.facing.x < 0) {
           this.ctx.translate(cx, cy - size * 0.15);
           this.ctx.scale(-1, 1);
-          if (tiltAngle !== 0) this.ctx.rotate(-tiltAngle);
+          if (tiltAngle !== 0) this.ctx.rotate(tiltAngle);
           this.ctx.drawImage(spriteImg, -size * 0.5, -size * 0.45, size, size);
         } else {
           this.ctx.translate(cx, cy - size * 0.15);
