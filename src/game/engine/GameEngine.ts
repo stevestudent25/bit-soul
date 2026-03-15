@@ -716,6 +716,17 @@ export class GameEngine {
       soul.facing.y = dy;
       if (dx !== 0) soul.facing.x = dx;
 
+      // Track vertical tilt ramp (for up/down sprite rotation)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const s = soul as any;
+      if (dx === 0 && dy !== 0) {
+        // Pure vertical movement — ramp tilt toward 1.0
+        s.verticalTilt = Math.min(1, (s.verticalTilt || 0) + 0.06);
+      } else {
+        // Horizontal input present — decay tilt
+        s.verticalTilt = Math.max(0, (s.verticalTilt || 0) - 0.12);
+      }
+
       // Footstep sounds
       this.footstepTimer--;
       if (this.footstepTimer <= 0) {
@@ -724,6 +735,10 @@ export class GameEngine {
       }
     } else {
       this.footstepTimer = 0;
+      // Decay vertical tilt when not moving
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const s2 = soul as any;
+      s2.verticalTilt = Math.max(0, (s2.verticalTilt || 0) - 0.12);
     }
 
     // Dash (dodge roll)
